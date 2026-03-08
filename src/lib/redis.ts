@@ -49,14 +49,14 @@ export const deleteOTP = async (identifier: string): Promise<void> => {
 // Helper functions for session management
 export const storeSession = async (
   sessionId: string,
-  data: any,
+  data: Record<string, unknown>,
   expirySeconds: number,
 ): Promise<void> => {
   const key = `session:${sessionId}`;
   await redis.setex(key, expirySeconds, JSON.stringify(data));
 };
 
-export const getSession = async (sessionId: string): Promise<any | null> => {
+export const getSession = async (sessionId: string): Promise<Record<string, unknown> | null> => {
   const key = `session:${sessionId}`;
   const data = await redis.get(key);
   return data ? JSON.parse(data) : null;

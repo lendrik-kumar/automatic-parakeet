@@ -1,246 +1,881 @@
-# Sprint Shoes API - Authentication Module
+E-COMMERCE BACKEND SYSTEM ARCHITECTURE AND ENDPOINT DESIGN
+==========================================================
 
-## Overview
+This document defines the backend system architecture, domain modules, endpoint structure, and operational flows for the remaining backend features of the e-commerce platform.
 
-This is a fully functional Node.js backend authentication module for Sprint Shoes e-commerce platform, built with Express, Prisma, TypeScript, and Redis.
+Authentication for both Admin and Client users is already implemented.
 
-## Tech Stack
+The system uses the following stack:
 
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Express.js
-- **Database**: PostgreSQL (via Prisma ORM)
-- **Cache/Session**: Redis
-- **Authentication**: JWT tokens with bcrypt password hashing
-- **Validation**: Zod schemas
-- **Security**: Rate limiting, Helmet, CORS
-- **Email**: Nodemailer
-- **SMS**: Dummy service (easily replaceable with real provider)
-- **Containerization**: Docker & Docker Compose
+Node.js
+Express
+Prisma ORM
+PostgreSQL
+JWT Access Tokens
+Refresh Token Sessions
+Better Auth
+Zod Validation
+Rate Limiting
+Email and SMS Services
 
-## Features Implemented
 
-### User Authentication
+------------------------------------------------------------
+SYSTEM DOMAIN MODULES
+------------------------------------------------------------
 
-- ✅ Multi-step registration with phone OTP verification
-- ✅ Email verification flow
-- ✅ Login with email/password
-- ✅ Alternative login with phone/OTP
-- ✅ JWT token-based authentication
-- ✅ Refresh token mechanism
-- ✅ Password reset flow
-- ✅ Session management in Redis
-- ✅ Email notifications (welcome, password reset, login alerts)
+The backend is divided into domain modules.
 
-### Admin Authentication
+Each module should follow a layered architecture.
 
-- ✅ Admin login with email/password
-- ✅ Role-based access control
-- ✅ Session management
-- ✅ Activity logging
-- ✅ Multi-session support with session revocation
+Routes
+Controllers
+Services
+Repositories (optional)
+Utils
 
-### Security
+Modules included in the system:
 
-- ✅ Rate limiting on sensitive endpoints
-- ✅ Password hashing with bcrypt
-- ✅ JWT token validation
-- ✅ Input validation with Zod
-- ✅ CORS and Helmet security headers
+auth (already implemented)
+products
+inventory
+cart
+orders
+shipping
+payments
+refunds
+returns
+coupons
+wishlist
+reviews
+users
+admins
+analytics
+activityLogs
 
-### Services
 
-- ✅ Email service with HTML templates
-- ✅ SMS service (dummy implementation, production-ready interface)
-- ✅ Redis-based OTP storage and verification
-- ✅ Session management
+------------------------------------------------------------
+PRODUCT SYSTEM
+------------------------------------------------------------
 
-## Project Structure
+Tables Used
 
-```
-src/
-├── app.ts                      # Express app configuration
-├── controllers/
-│   ├── user.controller.ts      # User auth logic
-│   └── admin.controller.ts     # Admin auth logic
-├── routes/
-│   ├── user.routes.ts          # User auth endpoints
-│   └── admin.routes.ts         # Admin auth endpoints
-├── middlewares/
-│   ├── auth.middleware.ts      # JWT authentication
-│   └── rateLimiter.middleware.ts # Rate limiting
-├── lib/
-│   ├── prisma.ts               # Prisma client
-│   ├── redis.ts                # Redis client & helpers
-│   ├── email.ts                # Email service
-│   └── sms.ts                  # SMS service
-└── utils/
-    └── errorHandler.ts         # Error handling
-```
+Product
+ProductVariant
+ProductImage
+SizeGuide
+ShoeSpecification
+Inventory
 
-## API Endpoints
 
-### User Authentication
+Admin Product Endpoints
 
-```
-POST   /api/user/auth/register/initiate-phone  # Start registration with phone
-POST   /api/user/auth/register/verify-phone    # Verify OTP
-POST   /api/user/auth/register/complete        # Complete registration
-POST   /api/user/auth/login/request-otp        # Request login OTP
-POST   /api/user/auth/login/phone              # Login with phone/OTP
-POST   /api/user/auth/login                    # Login with email/password
-POST   /api/user/auth/logout                   # Logout
-POST   /api/user/auth/refresh                  # Refresh access token
-POST   /api/user/auth/forgot-password          # Request password reset
-POST   /api/user/auth/reset-password           # Reset password
-GET    /api/user/auth/me                       # Get current user (protected)
-```
+POST /admin/products
 
-### Admin Authentication
+Create a product.
 
-```
-POST   /api/admin/auth/login                   # Admin login
-POST   /api/admin/auth/logout                  # Admin logout
-POST   /api/admin/auth/refresh                 # Refresh admin token
-GET    /api/admin/auth/me                      # Get current admin (protected)
-GET    /api/admin/auth/activity-logs           # Get activity logs (protected)
-DELETE /api/admin/auth/sessions/:sessionId     # Revoke session (protected)
-```
+Fields
 
-## Environment Variables
+name
+brand
+description
+gender
+shoeType
+category
+basePrice
+releaseDate
+featuredProduct
+newArrival
 
-See `.env.example` for all required environment variables:
 
-- Database configuration (PostgreSQL)
-- Redis configuration
-- JWT secrets
-- Email provider settings
-- SMS provider settings
+GET /admin/products
 
-## Getting Started
+List products.
 
-### Prerequisites
+Query parameters
 
-- Node.js 18+
-- Docker & Docker Compose
-- PostgreSQL (or use Docker)
-- Redis (or use Docker)
+page
+limit
+status
+search
+category
+brand
 
-### Installation
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Copy environment file:
-   ```bash
-   cp .env.example .env
-   ```
-4. Update `.env` with your configuration
+GET /admin/products/:productId
 
-### Start with Docker Compose
+Returns full product details including:
 
-```bash
-# Start PostgreSQL and Redis
-docker-compose up -d postgres redis
+product
+variants
+images
+specifications
+size guides
+inventory
 
-# Or start everything including the app
-docker-compose up -d
-```
 
-### Development
+PATCH /admin/products/:productId
 
-```bash
-# Generate Prisma client
-npm run prisma:generate
+Update product details.
 
-# Run migrations
-npm run prisma:migrate
 
-# Start development server
-npm run dev
-```
+DELETE /admin/products/:productId
 
-### Testing
+Archive product. Never hard delete.
 
-```bash
-# Run all tests
-npm test
 
-# Run tests in watch mode
-npm test:watch
+PATCH /admin/products/:productId/status
 
-# Generate coverage report
-npm test:coverage
-```
+Update product status.
 
-### Build for Production
+Possible states
 
-```bash
-npm run build
-npm start
-```
+DRAFT
+ACTIVE
+ARCHIVED
+DISCONTINUED
 
-## Testing
 
-Comprehensive test suite included covering:
+------------------------------------------------------------
+PRODUCT VARIANTS
+------------------------------------------------------------
 
-- User registration flow (all steps)
-- User login (email and phone/OTP)
-- Token refresh and validation
-- Password reset flow
-- Admin authentication
-- Rate limiting
-- Input validation
-- Email and SMS service invocation
+POST /admin/products/:productId/variants
 
-Tests use Jest and Supertest with proper mocking of external dependencies.
+Create product variant.
 
-## Architecture Highlights
+Fields
 
-### Multi-layer Architecture
+sku
+size
+color
+material
+width
+price
+comparePrice
+weight
+barcode
 
-- **Routes Layer**: HTTP routing only, no business logic
-- **Controller Layer**: Business logic, validation, orchestration
-- **Service Layer**: External communications (email, SMS)
-- **Data Layer**: Prisma ORM for database operations
 
-### Session Management
+PATCH /admin/variants/:variantId
 
-- JWT access tokens (short-lived)
-- Refresh tokens stored in database
-- Redis for temporary data (OTPs, password reset tokens)
+Update variant.
 
-### Security Features
 
-- Rate limiting: 5 requests/15min for auth, 3 requests/15min for OTP
-- Password complexity requirements
-- Token expiration
-- Account status checks
-- Activity logging for admins
+DELETE /admin/variants/:variantId
 
-## Database Schema
+Archive variant.
 
-The project uses Prisma with modular schema files in `prisma/schemas/`:
 
-- User and UserSession models
-- Admin, AdminSession, and AdminActivityLog models
-- Full e-commerce schema (products, orders, cart, etc.)
+------------------------------------------------------------
+PRODUCT IMAGES
+------------------------------------------------------------
 
-## Future Enhancements
+POST /admin/products/:productId/images
 
-- [ ] Email verification enforcement
-- [ ] 2FA support
-- [ ] OAuth integration (Google, Facebook, etc.)
-- [ ] Replace dummy SMS with real provider (Twilio, Fast2SMS, etc.)
-- [ ] Replace Nodemailer with Resend or SendGrid
-- [ ] Add WebSocket for real-time notifications
-- [ ] Implement admin permissions system
+Upload product images.
 
-## Author
 
-Built as a complete authentication module for Sprint Shoes e-commerce platform.
+DELETE /admin/images/:imageId
 
-## License
+Delete product image.
 
-ISC
+
+------------------------------------------------------------
+PRODUCT SPECIFICATIONS
+------------------------------------------------------------
+
+PUT /admin/products/:productId/specifications
+
+Update shoe specifications.
+
+
+------------------------------------------------------------
+SIZE GUIDES
+------------------------------------------------------------
+
+POST /admin/products/:productId/size-guides
+
+Create size guide.
+
+
+DELETE /admin/size-guides/:sizeGuideId
+
+Remove size guide.
+
+
+------------------------------------------------------------
+CLIENT PRODUCT ENDPOINTS
+------------------------------------------------------------
+
+GET /products
+
+List products.
+
+Filters
+
+category
+brand
+gender
+priceRange
+size
+color
+
+
+GET /products/:slug
+
+Return full product details including
+
+product
+variants
+inventory
+images
+reviews
+
+
+GET /products/featured
+
+Return featured products.
+
+
+GET /products/new-arrivals
+
+Return newly released products.
+
+
+GET /products/search?q=term
+
+Search products.
+
+
+------------------------------------------------------------
+INVENTORY SYSTEM
+------------------------------------------------------------
+
+Inventory Table Fields
+
+stockQuantity
+reservedStock
+availableStock
+reorderThreshold
+
+
+Stock Calculation
+
+availableStock = stockQuantity - reservedStock
+
+
+Admin Inventory Endpoints
+
+GET /admin/inventory
+
+List all inventory records.
+
+
+GET /admin/inventory/:variantId
+
+Get inventory details for variant.
+
+
+PATCH /admin/inventory/:variantId
+
+Update inventory.
+
+Fields
+
+stockQuantity
+reorderThreshold
+
+
+Inventory Update Flow
+
+Cart item added -> reserve stock
+Order placed -> confirm reserved stock
+Order cancelled -> release stock
+Return approved -> restock item
+
+
+------------------------------------------------------------
+CART SYSTEM
+------------------------------------------------------------
+
+Tables
+
+Cart
+CartItem
+
+One user has one cart.
+
+
+Cart Endpoints
+
+GET /cart
+
+Return user cart.
+
+
+POST /cart/items
+
+Add item to cart.
+
+Fields
+
+variantId
+size
+color
+quantity
+
+
+PATCH /cart/items/:itemId
+
+Update quantity.
+
+
+DELETE /cart/items/:itemId
+
+Remove item.
+
+
+DELETE /cart
+
+Clear cart.
+
+
+Cart Flow
+
+1 Validate product exists
+2 Validate variant
+3 Check inventory availability
+4 Reserve stock
+5 Add cart item
+6 Recalculate totals
+
+
+Cart Totals
+
+totalItems
+subtotal
+discount
+tax
+shippingEstimate
+totalPrice
+
+
+------------------------------------------------------------
+WISHLIST SYSTEM
+------------------------------------------------------------
+
+Tables
+
+Wishlist
+WishlistItem
+
+
+POST /wishlist/items
+
+Add item to wishlist.
+
+
+GET /wishlist
+
+List wishlist items.
+
+
+DELETE /wishlist/items/:itemId
+
+Remove item.
+
+
+POST /wishlist/items/:itemId/move-to-cart
+
+Move item to cart.
+
+
+------------------------------------------------------------
+ORDER SYSTEM
+------------------------------------------------------------
+
+Tables
+
+Order
+OrderItem
+OrderAddress
+
+
+Checkout Endpoint
+
+POST /orders/checkout
+
+Fields
+
+cartId
+addressId
+couponCode
+paymentMethod
+shippingMethod
+
+
+Checkout Flow
+
+1 Validate cart
+2 Validate inventory
+3 Calculate totals
+4 Apply coupon
+5 Create order
+6 Create order items snapshot
+7 Create order address snapshot
+8 Create payment record
+9 Reserve inventory
+10 Return payment session
+
+
+Client Order Endpoints
+
+GET /orders
+
+List user orders.
+
+
+GET /orders/:orderId
+
+Return order details.
+
+
+POST /orders/:orderId/cancel
+
+Cancel order.
+
+
+Order Status Lifecycle
+
+PENDING
+CONFIRMED
+PROCESSING
+SHIPPED
+DELIVERED
+CANCELLED
+RETURNED
+
+
+Admin Order Endpoints
+
+GET /admin/orders
+
+Filters
+
+status
+date
+customer
+paymentStatus
+
+
+GET /admin/orders/:orderId
+
+
+PATCH /admin/orders/:orderId/status
+
+Update order status.
+
+
+------------------------------------------------------------
+SHIPPING SYSTEM
+------------------------------------------------------------
+
+Tables
+
+Shipment
+ShippingMethod
+
+
+Admin Shipping Method Endpoints
+
+POST /admin/shipping-methods
+
+Create shipping method.
+
+
+GET /admin/shipping-methods
+
+
+PATCH /admin/shipping-methods/:id
+
+
+DELETE /admin/shipping-methods/:id
+
+
+Shipment Management
+
+POST /admin/orders/:orderId/shipments
+
+Create shipment.
+
+Fields
+
+courierName
+trackingNumber
+shippingMethod
+
+
+PATCH /admin/shipments/:shipmentId/status
+
+
+Shipping Status
+
+PENDING
+PICKED_UP
+IN_TRANSIT
+OUT_FOR_DELIVERY
+DELIVERED
+FAILED
+RETURNED
+
+
+------------------------------------------------------------
+PAYMENT SYSTEM razorpay mock api for development
+------------------------------------------------------------
+
+Table
+
+Payment
+
+
+POST /payments/create
+
+Create payment session.
+
+
+POST /payments/webhook
+
+Handle provider webhook.
+
+
+GET /payments/:paymentId
+
+Get payment details.
+
+
+Payment Status
+
+PENDING
+COMPLETED
+FAILED
+REFUNDED
+
+
+------------------------------------------------------------
+COUPON SYSTEM
+------------------------------------------------------------
+
+Table
+
+Coupon
+
+
+Admin Coupon Endpoints
+
+POST /admin/coupons
+
+Create coupon.
+
+
+GET /admin/coupons
+
+
+PATCH /admin/coupons/:couponId
+
+
+DELETE /admin/coupons/:couponId
+
+
+Client Coupon Endpoint
+
+POST /coupons/validate
+
+
+Coupon Rules
+
+minimumOrderValue
+usageLimit
+expiryDate
+maximumDiscount
+
+
+Coupon Status
+
+ACTIVE
+INACTIVE
+EXPIRED
+
+
+------------------------------------------------------------
+RETURNS SYSTEM
+------------------------------------------------------------
+
+Tables
+
+ReturnRequest
+ReturnItem
+
+
+Client Endpoints
+
+POST /orders/:orderId/returns
+
+Create return request.
+
+
+GET /returns
+
+User return requests.
+
+
+Admin Endpoints
+
+GET /admin/returns
+
+
+PATCH /admin/returns/:returnId
+
+
+Return Status
+
+PENDING
+APPROVED
+REJECTED
+RECEIVED
+REFUNDED
+
+
+------------------------------------------------------------
+REFUNDS SYSTEM
+------------------------------------------------------------
+
+Table
+
+Refund
+
+
+POST /admin/refunds
+
+Create refund.
+
+
+PATCH /admin/refunds/:refundId
+
+Update refund status.
+
+
+Refund Status
+
+PENDING
+PROCESSING
+COMPLETED
+FAILED
+CANCELLED
+
+
+------------------------------------------------------------
+REVIEWS SYSTEM
+------------------------------------------------------------
+
+Table
+
+ProductReview
+
+
+POST /products/:productId/reviews
+
+Create review.
+
+
+GET /products/:productId/reviews
+
+
+DELETE /admin/reviews/:reviewId
+
+
+------------------------------------------------------------
+USER MANAGEMENT (ADMIN)
+------------------------------------------------------------
+
+GET /admin/users
+
+
+GET /admin/users/:userId
+
+
+PATCH /admin/users/:userId/status
+
+
+User Status
+
+ACTIVE
+SUSPENDED
+DELETED
+
+
+------------------------------------------------------------
+ADMIN MANAGEMENT
+------------------------------------------------------------
+
+GET /admin/admins
+
+
+POST /admin/admins
+
+
+PATCH /admin/admins/:adminId
+
+
+PATCH /admin/admins/:adminId/status
+
+
+Admin Status
+
+ACTIVE
+INACTIVE
+SUSPENDED
+
+
+------------------------------------------------------------
+ACTIVITY LOGS
+------------------------------------------------------------
+
+GET /admin/activity-logs
+
+Filters
+
+adminId
+entityType
+action
+
+
+Logged Actions
+
+CREATE
+UPDATE
+DELETE
+ACTIVATE
+DEACTIVATE
+
+
+------------------------------------------------------------
+ANALYTICS
+------------------------------------------------------------
+
+GET /admin/analytics/dashboard
+
+Returns
+
+sales today
+orders today
+top products
+low inventory
+
+
+GET /admin/analytics/sales
+
+
+GET /admin/analytics/products
+
+
+------------------------------------------------------------
+ORDER LIFECYCLE
+------------------------------------------------------------
+
+Customer Checkout
+
+↓
+
+Order Created
+
+↓
+
+Payment Pending
+
+↓
+
+Payment Success
+
+↓
+
+Order Confirmed
+
+↓
+
+Order Processing
+
+↓
+
+Shipment Created
+
+↓
+
+Shipped
+
+↓
+
+Delivered
+
+↓
+
+Optional Return
+
+↓
+
+Refund
+
+
+------------------------------------------------------------
+INVENTORY LIFECYCLE
+------------------------------------------------------------
+
+stockQuantity = total inventory
+
+reservedStock = items in cart or pending orders
+
+availableStock = stockQuantity - reservedStock
+
+
+Reserve stock when
+
+Cart item added
+
+
+Release stock when
+
+Cart item removed
+Order cancelled
+
+
+Deduct stock when
+
+Order confirmed
+
+
+Increase stock when
+
+Return approved
+
+
+------------------------------------------------------------
+BACKGROUND JOBS
+------------------------------------------------------------
+
+coupon expiration job
+
+inventory reorder alert job
+
+abandoned cart cleanup job
+
+order payment timeout job
+
+refund processing job
+
+
+build this system
+
+at the end generate a api guide for integartion of apis client and admin both
+
+------------------------------------------------------------
+END OF DOCUMENT
+------------------------------------------------------------

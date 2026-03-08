@@ -2,27 +2,23 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma.js";
 import ErrorHandler from "../utils/errorHandler.js";
+import { JWT_SECRET } from "../lib/auth.js";
 
 // Extend Express Request type to include user/admin
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        email: string;
-        role?: string;
-      };
-      admin?: {
-        id: string;
-        email: string;
-        roleId: string;
-      };
-    }
+declare module "express-serve-static-core" {
+  interface Request {
+    user?: {
+      id: string;
+      email: string;
+      role?: string;
+    };
+    admin?: {
+      id: string;
+      email: string;
+      roleId: string;
+    };
   }
 }
-
-const JWT_SECRET =
-  process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
 // Middleware to authenticate user JWT tokens
 export const authenticateUser = async (

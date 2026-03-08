@@ -1,0 +1,23 @@
+import router from "express";
+import {
+  getCart,
+  addItem,
+  updateItem,
+  removeItem,
+  clearCart,
+} from "../controllers/cart.controller.js";
+import { authenticateUser } from "../middlewares/auth.middleware.js";
+import { generalLimiter } from "../middlewares/rateLimiter.middleware.js";
+
+const cartRouter = router.Router();
+
+cartRouter.use(authenticateUser);
+cartRouter.use(generalLimiter);
+
+cartRouter.get("/", getCart);
+cartRouter.post("/items", addItem);
+cartRouter.put("/items/:itemId", updateItem);
+cartRouter.delete("/items/:itemId", removeItem);
+cartRouter.delete("/", clearCart);
+
+export default cartRouter;

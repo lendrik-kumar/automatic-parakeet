@@ -1,0 +1,21 @@
+import router from "express";
+import {
+  checkout,
+  listOrders,
+  getOrder,
+  cancelOrder,
+} from "../controllers/order.controller.js";
+import { authenticateUser } from "../middlewares/auth.middleware.js";
+import { generalLimiter } from "../middlewares/rateLimiter.middleware.js";
+
+const orderRouter = router.Router();
+
+orderRouter.use(authenticateUser);
+orderRouter.use(generalLimiter);
+
+orderRouter.post("/checkout", checkout);
+orderRouter.get("/", listOrders);
+orderRouter.get("/:orderId", getOrder);
+orderRouter.post("/:orderId/cancel", cancelOrder);
+
+export default orderRouter;

@@ -1,187 +1,161 @@
+import twilio from "twilio";
 import { storeOTP } from "./redis.js";
 
-// SMS Provider Configuration
-const SMS_PROVIDER = process.env.SMS_PROVIDER || "dummy"; // Can be 'dummy', 'twilio', 'fast2sms', etc.
+// ─── Twilio Configuration ─────────────────────────────────────────────────────
 
-// Interface for SMS options
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_PHONE = process.env.TWILIO_PHONE_NUMBER;
+const IS_PRODUCTION = process.env.NODE_ENV?.toUpperCase() === "PRODUCTION";
+
+/**
+ * Lazily initialised Twilio client — avoids crashing on startup when
+ * credentials are not set (dev / test environments).
+ */
+let _client: ReturnType<typeof twilio> | null = null;
+
+const getTwilioClient = (): ReturnType<typeof twilio> => {
+  if (!_client) {
+    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+      throw new Error(
+        "Twilio credentials not configured. " +
+          "Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN env vars.",
+      );
+    }
+    _client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+  }
+  return _client;
+};
+
+// ─── Core Interface ───────────────────────────────────────────────────────────
+
 interface SMSOptions {
   phoneNumber: string;
   message: string;
 }
 
 /**
- * Generate a random 6-digit OTP
+ * Generate a cryptographically random 6-digit OTP.
  */
 export const generateOTP = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(100_000 + Math.random() * 900_000).toString();
 };
 
 /**
- * Base function to send SMS
- * This is a dummy implementation that logs to console
- * In production, replace with actual SMS provider (Twilio, Fast2SMS, etc.)
+ * Core SMS sender using Twilio.
+ * Falls back to a console log in non-production environments so the
+ * server runs without real credentials during development / testing.
  */
 export const sendSMS = async (options: SMSOptions): Promise<boolean> => {
   try {
-    if (SMS_PROVIDER === "dummy") {
-      // Dummy implementation - just log to console
-      console.log("=".repeat(50));
-      console.log("📱 SMS NOTIFICATION (Dummy Mode)");
-      console.log("=".repeat(50));
-      console.log(`To: ${options.phoneNumber}`);
-      console.log(`Message: ${options.message}`);
-      console.log("=".repeat(50));
+    if (!IS_PRODUCTION) {
+      // ── Dev / Test mode ────────────────────────────────────────────────────
+      console.log("━".repeat(55));
+      console.log("📱  TWILIO SMS  (dev mode — not actually sent)");
+      console.log(`  To  : ${options.phoneNumber}`);
+      console.log(`  Body: ${options.message}`);
+      console.log("━".repeat(55));
       return true;
     }
 
-    // TODO: Implement actual SMS provider integration
-    // Example for Twilio:
-    // const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    // const authToken = process.env.TWILIO_AUTH_TOKEN;
-    // const client = require('twilio')(accountSid, authToken);
-    // await client.messages.create({
-    //   body: options.message,
-    //   from: process.env.TWILIO_PHONE_NUMBER,
-    //   to: options.phoneNumber
-    // });
+    // ── Production: send via Twilio ────────────────────────────────────────
+    if (!TWILIO_PHONE) {
+      throw new Error("TWILIO_PHONE_NUMBER env var is not set.");
+    }
 
-    console.log(`SMS sent successfully to ${options.phoneNumber}`);
+    const client = getTwilioClient();
+    await client.messages.create({
+      body: options.message,
+      from: TWILIO_PHONE,
+      to: options.phoneNumber,
+    });
+
     return true;
   } catch (error) {
-    console.error("Error sending SMS:", error);
+    console.error("[Twilio] Failed to send SMS:", error);
     return false;
   }
 };
 
 /**
- * Send OTP via SMS for phone verification
+ * Generate an OTP, store it in Redis, and send it via Twilio SMS.
+ *
+ * @param phoneNumber  E.164 formatted phone number (e.g. "+14155551234")
+ * @param purpose      Determines the message copy
+ * @param expiryMins   OTP TTL in Redis (default: 10 minutes)
  */
 export const sendOTPViaSMS = async (
   phoneNumber: string,
   purpose: "registration" | "login" | "verification" = "verification",
+  expiryMins = 10,
 ): Promise<{ success: boolean; otp?: string }> => {
   try {
-    // Generate OTP
     const otp = generateOTP();
 
-    // Store OTP in Redis with 10 minutes expiry
-    await storeOTP(phoneNumber, otp, 10);
+    // Store OTP in Redis BEFORE sending so we never deliver an OTP we can't verify
+    await storeOTP(phoneNumber, otp, expiryMins);
 
-    // Compose message based on purpose
-    let message = "";
-    switch (purpose) {
-      case "registration":
-        message = `Welcome to Sprint Shoes! Your registration OTP is: ${otp}. Valid for 10 minutes. Do not share this code.`;
-        break;
-      case "login":
-        message = `Your Sprint Shoes login OTP is: ${otp}. Valid for 10 minutes. Do not share this code.`;
-        break;
-      default:
-        message = `Your Sprint Shoes verification code is: ${otp}. Valid for 10 minutes.`;
-    }
+    const messages: Record<typeof purpose, string> = {
+      registration: `Welcome to Sprint Shoes! Your registration OTP is ${otp}. Valid for ${expiryMins} min. Never share this code.`,
+      login: `Your Sprint Shoes login OTP is ${otp}. Valid for ${expiryMins} min. Never share this code.`,
+      verification: `Your Sprint Shoes verification code is ${otp}. Valid for ${expiryMins} min.`,
+    };
 
-    // Send SMS
-    const sent = await sendSMS({
-      phoneNumber,
-      message,
-    });
+    const sent = await sendSMS({ phoneNumber, message: messages[purpose] });
 
-    if (sent) {
-      // Return OTP in response (only for development/dummy mode)
-      // In production, never return the OTP in the response
-      return {
-        success: true,
-        otp: SMS_PROVIDER === "dummy" ? otp : undefined,
-      };
-    }
-
-    return { success: false };
+    return {
+      success: sent,
+      // Never expose raw OTP in production
+      otp: IS_PRODUCTION ? undefined : otp,
+    };
   } catch (error) {
-    console.error("Error sending OTP via SMS:", error);
+    console.error("[Twilio] sendOTPViaSMS error:", error);
     return { success: false };
   }
 };
 
-/**
- * Send login notification via SMS
- */
-export const sendLoginNotificationSMS = async (
+// ─── Transactional SMS Notifications ─────────────────────────────────────────
+
+/** Security alert: a new login was detected. */
+export const sendLoginAlertSMS = async (
   phoneNumber: string,
   firstName: string,
   device: string,
   ipAddress: string,
-): Promise<boolean> => {
-  try {
-    const message = `Hi ${firstName}, a new login was detected on your Sprint Shoes account from ${device} (${ipAddress}). If this wasn't you, secure your account immediately.`;
+): Promise<boolean> =>
+  sendSMS({
+    phoneNumber,
+    message: `Hi ${firstName}, a new login was detected on your Sprint Shoes account from ${device} (IP: ${ipAddress}). Not you? Secure your account immediately at sprintshoes.com`,
+  });
 
-    return await sendSMS({
-      phoneNumber,
-      message,
-    });
-  } catch (error) {
-    console.error("Error sending login notification SMS:", error);
-    return false;
-  }
-};
-
-/**
- * Send password reset notification via SMS
- */
-export const sendPasswordResetNotificationSMS = async (
+/** Security alert: password was changed. */
+export const sendPasswordChangedAlertSMS = async (
   phoneNumber: string,
   firstName: string,
-): Promise<boolean> => {
-  try {
-    const message = `Hi ${firstName}, a password reset was requested for your Sprint Shoes account. If you didn't request this, please contact support immediately.`;
+): Promise<boolean> =>
+  sendSMS({
+    phoneNumber,
+    message: `Hi ${firstName}, your Sprint Shoes password was just changed. If this wasn't you, contact support immediately.`,
+  });
 
-    return await sendSMS({
-      phoneNumber,
-      message,
-    });
-  } catch (error) {
-    console.error("Error sending password reset notification SMS:", error);
-    return false;
-  }
-};
-
-/**
- * Send order confirmation via SMS
- */
+/** Order placed confirmation. */
 export const sendOrderConfirmationSMS = async (
   phoneNumber: string,
   orderId: string,
   amount: number,
-): Promise<boolean> => {
-  try {
-    const message = `Thank you for your order! Order #${orderId} for $${amount.toFixed(2)} has been confirmed. Track your order at sprintshoes.com`;
+): Promise<boolean> =>
+  sendSMS({
+    phoneNumber,
+    message: `Your Sprint Shoes order #${orderId} for $${amount.toFixed(2)} is confirmed! Track it at sprintshoes.com`,
+  });
 
-    return await sendSMS({
-      phoneNumber,
-      message,
-    });
-  } catch (error) {
-    console.error("Error sending order confirmation SMS:", error);
-    return false;
-  }
-};
-
-/**
- * Send shipment notification via SMS
- */
+/** Shipment dispatched notification. */
 export const sendShipmentNotificationSMS = async (
   phoneNumber: string,
   orderId: string,
   trackingNumber: string,
-): Promise<boolean> => {
-  try {
-    const message = `Your order #${orderId} has been shipped! Tracking number: ${trackingNumber}. Track at sprintshoes.com`;
-
-    return await sendSMS({
-      phoneNumber,
-      message,
-    });
-  } catch (error) {
-    console.error("Error sending shipment notification SMS:", error);
-    return false;
-  }
-};
+): Promise<boolean> =>
+  sendSMS({
+    phoneNumber,
+    message: `Order #${orderId} has shipped! Tracking: ${trackingNumber}. Track at sprintshoes.com`,
+  });
