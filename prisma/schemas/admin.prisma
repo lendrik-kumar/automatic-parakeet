@@ -1,118 +1,118 @@
-// ============================================
-// ENUMS
-// ============================================
+// // ============================================
+// // ENUMS
+// // ============================================
 
-enum AdminAccountStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-}
+// enum AdminAccountStatus {
+//   ACTIVE
+//   INACTIVE
+//   SUSPENDED
+// }
 
-enum CouponStatus {
-  ACTIVE
-  INACTIVE
-  EXPIRED
-}
+// enum CouponStatus {
+//   ACTIVE
+//   INACTIVE
+//   EXPIRED
+// }
 
-enum DiscountType {
-  PERCENTAGE
-  FIXED_AMOUNT
-}
+// enum DiscountType {
+//   PERCENTAGE
+//   FIXED_AMOUNT
+// }
 
-enum AdminActionType {
-  CREATE
-  UPDATE
-  DELETE
-  ACTIVATE
-  DEACTIVATE
-}
+// enum AdminActionType {
+//   CREATE
+//   UPDATE
+//   DELETE
+//   ACTIVATE
+//   DEACTIVATE
+// }
 
-// ============================================
-// MODELS
-// ============================================
+// // ============================================
+// // MODELS
+// // ============================================
 
-model Admin {
-  id              String              @id @default(uuid())
-  firstName       String              @db.VarChar(100)
-  lastName        String              @db.VarChar(100)
-  email           String              @unique @db.VarChar(255)
-  passwordHash    String              @db.VarChar(255)
-  roleId          String
-  profileImage    String?             @db.Text
-  accountStatus   AdminAccountStatus  @default(ACTIVE)
-  lastLogin       DateTime?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+// model Admin {
+//   id              String              @id @default(uuid())
+//   firstName       String              @db.VarChar(100)
+//   lastName        String              @db.VarChar(100)
+//   email           String              @unique @db.VarChar(255)
+//   passwordHash    String              @db.VarChar(255)
+//   roleId          String
+//   profileImage    String?             @db.Text
+//   accountStatus   AdminAccountStatus  @default(ACTIVE)
+//   lastLogin       DateTime?
+//   createdAt       DateTime            @default(now())
+//   updatedAt       DateTime            @updatedAt
 
-  role            Role                @relation("AdminRole", fields: [roleId], references: [id], onDelete: Restrict)
-  sessions        AdminSession[]
-  activityLogs    AdminActivityLog[]
+//   role            Role                @relation("AdminRole", fields: [roleId], references: [id], onDelete: Restrict)
+//   sessions        AdminSession[]
+//   activityLogs    AdminActivityLog[]
 
-  @@index([email])
-  @@index([roleId])
-  @@index([accountStatus])
-}
+//   @@index([email])
+//   @@index([roleId])
+//   @@index([accountStatus])
+// }
 
-model Role {
-  id          String   @id @default(uuid())
-  roleName    String   @unique @db.VarChar(100)
-  description String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// model Role {
+//   id          String   @id @default(uuid())
+//   roleName    String   @unique @db.VarChar(100)
+//   description String?  @db.Text
+//   createdAt   DateTime @default(now())
+//   updatedAt   DateTime @updatedAt
 
-  admins      Admin[]  @relation("AdminRole")
+//   admins      Admin[]  @relation("AdminRole")
 
-  @@index([roleName])
-}
+//   @@index([roleName])
+// }
 
-model AdminSession {
-  id          String   @id @default(uuid())
-  adminId     String
-  device      String?  @db.VarChar(255)
-  ipAddress   String?  @db.VarChar(50)
-  refreshToken String  @db.Text
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
+// model AdminSession {
+//   id          String   @id @default(uuid())
+//   adminId     String
+//   device      String?  @db.VarChar(255)
+//   ipAddress   String?  @db.VarChar(50)
+//   refreshToken String  @db.Text
+//   expiresAt   DateTime
+//   createdAt   DateTime @default(now())
 
-  admin       Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+//   admin       Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
-  @@index([adminId])
-}
+//   @@index([adminId])
+// }
 
-model AdminActivityLog {
-  id          String               @id @default(uuid())
-  adminId     String
-  action      AdminActionType
-  entityType  String               @db.VarChar(100)
-  entityId    String?              @db.VarChar(255)
-  oldData     String?              @db.Text
-  newData     String?              @db.Text
-  timestamp   DateTime             @default(now())
+// model AdminActivityLog {
+//   id          String               @id @default(uuid())
+//   adminId     String
+//   action      AdminActionType
+//   entityType  String               @db.VarChar(100)
+//   entityId    String?              @db.VarChar(255)
+//   oldData     String?              @db.Text
+//   newData     String?              @db.Text
+//   timestamp   DateTime             @default(now())
 
-  admin       Admin                @relation(fields: [adminId], references: [id], onDelete: Cascade)
+//   admin       Admin                @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
-  @@index([adminId])
-  @@index([action])
-  @@index([timestamp])
-}
+//   @@index([adminId])
+//   @@index([action])
+//   @@index([timestamp])
+// }
 
-model Coupon {
-  id                String       @id @default(uuid())
-  code              String       @unique @db.VarChar(50)
-  description       String?      @db.Text
-  discountType      DiscountType
-  discountValue     Float
-  minimumOrderValue Float?
-  maximumDiscount   Float?
-  usageLimit        Int?
-  usedCount         Int          @default(0)
-  startDate         DateTime
-  expiryDate        DateTime
-  status            CouponStatus @default(ACTIVE)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+// model Coupon {
+//   id                String       @id @default(uuid())
+//   code              String       @unique @db.VarChar(50)
+//   description       String?      @db.Text
+//   discountType      DiscountType
+//   discountValue     Float
+//   minimumOrderValue Float?
+//   maximumDiscount   Float?
+//   usageLimit        Int?
+//   usedCount         Int          @default(0)
+//   startDate         DateTime
+//   expiryDate        DateTime
+//   status            CouponStatus @default(ACTIVE)
+//   createdAt         DateTime     @default(now())
+//   updatedAt         DateTime     @updatedAt
 
-  @@index([code])
-  @@index([status])
-  @@index([expiryDate])
-}
+//   @@index([code])
+//   @@index([status])
+//   @@index([expiryDate])
+// }

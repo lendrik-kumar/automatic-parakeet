@@ -1,23 +1,23 @@
-// ============================================
-// MODELS
-// ============================================
+// // ============================================
+// // MODELS
+// // ============================================
 
-model ProductReview {
-  id                String   @id @default(uuid())
-  customerId        String
-  productId         String
-  rating            Int      // 1-5 scale
-  reviewTitle       String   @db.VarChar(255)
-  reviewText        String?  @db.Text
-  images            String?  @db.Text // JSON array of image URLs
-  verifiedPurchase  Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+// model ProductReview {
+//   id                String   @id @default(uuid())
+//   customerId        String
+//   productId         String
+//   rating            Int      // 1-5 scale
+//   reviewTitle       String   @db.VarChar(255)
+//   reviewText        String?  @db.Text
+//   images            String?  @db.Text // JSON array of image URLs
+//   verifiedPurchase  Boolean  @default(false)
+//   createdAt         DateTime @default(now())
+//   updatedAt         DateTime @updatedAt
 
-  customer          User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+//   customer          User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+//   product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@index([customerId])
-  @@index([productId])
-  @@index([rating])
-}
+//   @@index([customerId])
+//   @@index([productId])
+//   @@index([rating])
+// }

@@ -1,128 +1,128 @@
-// ============================================
-// ENUMS
-// ============================================
+// // ============================================
+// // ENUMS
+// // ============================================
 
-enum OrderStatus {
-  PENDING
-  CONFIRMED
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  CANCELLED
-  RETURNED
-}
+// enum OrderStatus {
+//   PENDING
+//   CONFIRMED
+//   PROCESSING
+//   SHIPPED
+//   DELIVERED
+//   CANCELLED
+//   RETURNED
+// }
 
-enum FulfillmentStatus {
-  PENDING
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  CANCELLED
-}
+// enum FulfillmentStatus {
+//   PENDING
+//   PROCESSING
+//   SHIPPED
+//   DELIVERED
+//   CANCELLED
+// }
 
-enum ReturnStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  RECEIVED
-  REFUNDED
-}
+// enum ReturnStatus {
+//   PENDING
+//   APPROVED
+//   REJECTED
+//   RECEIVED
+//   REFUNDED
+// }
 
-// ============================================
-// MODELS
-// ============================================
+// // ============================================
+// // MODELS
+// // ============================================
 
-model Order {
-  id                String           @id @default(uuid())
-  orderNumber       String           @unique @db.VarChar(50)
-  customerId        String
-  orderStatus       OrderStatus      @default(PENDING)
-  paymentStatus     PaymentStatus    @default(PENDING)
-  fulfillmentStatus FulfillmentStatus @default(PENDING)
-  subtotal          Float
-  taxAmount         Float
-  shippingCost      Float
-  discountAmount    Float           @default(0)
-  totalAmount       Float
-  currency          String           @default("USD") @db.VarChar(3)
-  placedAt          DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+// model Order {
+//   id                String           @id @default(uuid())
+//   orderNumber       String           @unique @db.VarChar(50)
+//   customerId        String
+//   orderStatus       OrderStatus      @default(PENDING)
+//   paymentStatus     PaymentStatus    @default(PENDING)
+//   fulfillmentStatus FulfillmentStatus @default(PENDING)
+//   subtotal          Float
+//   taxAmount         Float
+//   shippingCost      Float
+//   discountAmount    Float           @default(0)
+//   totalAmount       Float
+//   currency          String           @default("USD") @db.VarChar(3)
+//   placedAt          DateTime         @default(now())
+//   updatedAt         DateTime         @updatedAt
 
-  customer          User             @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  items             OrderItem[]
-  addresses         OrderAddress?
-  payments          Payment[]
-  shipments         Shipment[]
-  returnRequests    ReturnRequest[]
-  refunds           Refund[]
+//   customer          User             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+//   items             OrderItem[]
+//   addresses         OrderAddress?
+//   payments          Payment[]
+//   shipments         Shipment[]
+//   returnRequests    ReturnRequest[]
+//   refunds           Refund[]
 
-  @@index([customerId])
-  @@index([orderStatus])
-  @@index([paymentStatus])
-  @@index([orderNumber])
-}
+//   @@index([customerId])
+//   @@index([orderStatus])
+//   @@index([paymentStatus])
+//   @@index([orderNumber])
+// }
 
-model OrderItem {
-  id                  String   @id @default(uuid())
-  orderId             String
-  productId           String
-  variantId           String
-  productNameSnapshot String   @db.VarChar(255)
-  size                String   @db.VarChar(50)
-  color               String   @db.VarChar(100)
-  quantity            Int
-  price               Float
-  total               Float
-  createdAt           DateTime @default(now())
+// model OrderItem {
+//   id                  String   @id @default(uuid())
+//   orderId             String
+//   productId           String
+//   variantId           String
+//   productNameSnapshot String   @db.VarChar(255)
+//   size                String   @db.VarChar(50)
+//   color               String   @db.VarChar(100)
+//   quantity            Int
+//   price               Float
+//   total               Float
+//   createdAt           DateTime @default(now())
 
-  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product             Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  variant             ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+//   order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+//   product             Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+//   variant             ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
-  @@index([orderId])
-  @@index([productId])
-  @@index([variantId])
-}
+//   @@index([orderId])
+//   @@index([productId])
+//   @@index([variantId])
+// }
 
-model OrderAddress {
-  id                String   @id @default(uuid())
-  orderId           String   @unique
-  shippingAddress   String   @db.Text
-  billingAddress    String   @db.Text
-  createdAt         DateTime @default(now())
+// model OrderAddress {
+//   id                String   @id @default(uuid())
+//   orderId           String   @unique
+//   shippingAddress   String   @db.Text
+//   billingAddress    String   @db.Text
+//   createdAt         DateTime @default(now())
 
-  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+//   order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@index([orderId])
-}
+//   @@index([orderId])
+// }
 
-model ReturnRequest {
-  id            String       @id @default(uuid())
-  orderId       String
-  customerId    String
-  reason        String       @db.Text
-  returnStatus  ReturnStatus @default(PENDING)
-  requestedAt   DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+// model ReturnRequest {
+//   id            String       @id @default(uuid())
+//   orderId       String
+//   customerId    String
+//   reason        String       @db.Text
+//   returnStatus  ReturnStatus @default(PENDING)
+//   requestedAt   DateTime     @default(now())
+//   updatedAt     DateTime     @updatedAt
 
-  order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  customer      User         @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  items         ReturnItem[]
+//   order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+//   customer      User         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+//   items         ReturnItem[]
 
-  @@index([orderId])
-  @@index([customerId])
-  @@index([returnStatus])
-}
+//   @@index([orderId])
+//   @@index([customerId])
+//   @@index([returnStatus])
+// }
 
-model ReturnItem {
-  id            String   @id @default(uuid())
-  returnId      String
-  orderItemId   String
-  quantity      Int
-  refundAmount  Float
-  createdAt     DateTime @default(now())
+// model ReturnItem {
+//   id            String   @id @default(uuid())
+//   returnId      String
+//   orderItemId   String
+//   quantity      Int
+//   refundAmount  Float
+//   createdAt     DateTime @default(now())
 
-  returnRequest ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
+//   returnRequest ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
 
-  @@index([returnId])
-}
+//   @@index([returnId])
+// }

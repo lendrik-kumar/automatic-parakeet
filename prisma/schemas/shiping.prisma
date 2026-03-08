@@ -1,48 +1,48 @@
-// ============================================
-// ENUMS
-// ============================================
+// // ============================================
+// // ENUMS
+// // ============================================
 
-enum ShippingStatus {
-  PENDING
-  PICKED_UP
-  IN_TRANSIT
-  OUT_FOR_DELIVERY
-  DELIVERED
-  FAILED
-  RETURNED
-}
+// enum ShippingStatus {
+//   PENDING
+//   PICKED_UP
+//   IN_TRANSIT
+//   OUT_FOR_DELIVERY
+//   DELIVERED
+//   FAILED
+//   RETURNED
+// }
 
-// ============================================
-// MODELS
-// ============================================
+// // ============================================
+// // MODELS
+// // ============================================
 
-model Shipment {
-  id                String          @id @default(uuid())
-  orderId           String
-  courierName       String          @db.VarChar(100)
-  trackingNumber    String?         @unique @db.VarChar(255)
-  shippingMethod    String          @db.VarChar(100)
-  shippedAt         DateTime?
-  deliveredAt       DateTime?
-  shippingStatus    ShippingStatus  @default(PENDING)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+// model Shipment {
+//   id                String          @id @default(uuid())
+//   orderId           String
+//   courierName       String          @db.VarChar(100)
+//   trackingNumber    String?         @unique @db.VarChar(255)
+//   shippingMethod    String          @db.VarChar(100)
+//   shippedAt         DateTime?
+//   deliveredAt       DateTime?
+//   shippingStatus    ShippingStatus  @default(PENDING)
+//   createdAt         DateTime        @default(now())
+//   updatedAt         DateTime        @updatedAt
 
-  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+//   order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@index([orderId])
-  @@index([trackingNumber])
-  @@index([shippingStatus])
-}
+//   @@index([orderId])
+//   @@index([trackingNumber])
+//   @@index([shippingStatus])
+// }
 
-model ShippingMethod {
-  id                    String   @id @default(uuid())
-  name                  String   @unique @db.VarChar(100)
-  description           String?  @db.Text
-  cost                  Float
-  estimatedDeliveryDays Int
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+// model ShippingMethod {
+//   id                    String   @id @default(uuid())
+//   name                  String   @unique @db.VarChar(100)
+//   description           String?  @db.Text
+//   cost                  Float
+//   estimatedDeliveryDays Int
+//   createdAt             DateTime @default(now())
+//   updatedAt             DateTime @updatedAt
 
-  @@index([name])
-}
+//   @@index([name])
+// }
