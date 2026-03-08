@@ -1,0 +1,115 @@
+version: "3.9"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: shoes_postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "${DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - shoes_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: shoes_redis
+    restart: unless-stopped
+    env_file: .env
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - shoes_network
+
+  # Application Server
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shoes_app
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      PORT: 3000
+    ports:
+      - "${APP_PORT}:3000"
+    volumes:
+      # Mount source code for development (optional)
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      # Exclude node_modules to use container's
+      - /app/node_modules
+    networks:
+      - shoes_network
+    # Run migrations and optionally seed on startup
+    command: >
+      sh -c "
+        echo '⏳ Waiting for database to be ready...' &&
+        sleep 3 &&
+        echo '🔄 Running Prisma migrations...' &&
+        npx prisma migrate deploy || echo '⚠️  Migration warning - continuing...' &&
+        if [ \"$$ENABLE_SEED\" = \"true\" ]; then
+          echo '🌱 Running seed script...' &&
+          npm run build-schema &&
+          npm run seed || echo '⚠️  Seed warning - continuing...' &&
+          echo '✅ Migrations and seed completed!';
+        else
+          echo '⏭️  Seed skipped (ENABLE_SEED=false)';
+        fi &&
+        echo '🚀 Starting application...' &&
+        npm start
+      "
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  shoes_network:
+    driver: bridge

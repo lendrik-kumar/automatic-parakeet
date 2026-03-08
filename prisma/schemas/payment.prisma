@@ -1,0 +1,78 @@
+// ============================================
+// ENUMS
+// ============================================
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  NET_BANKING
+  WALLET
+  UPI
+  COD
+}
+
+enum PaymentProvider {
+  STRIPE
+  RAZORPAY
+  PAYPAL
+  INTERNAL
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model Payment {
+  id              String          @id @default(uuid())
+  orderId         String
+  paymentMethod   PaymentMethod
+  paymentProvider PaymentProvider
+  transactionId   String?         @unique @db.VarChar(255)
+  paymentStatus   PaymentStatus   @default(PENDING)
+  amount          Float
+  currency        String          @default("USD") @db.VarChar(3)
+  paidAt          DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds         Refund[]
+
+  @@index([orderId])
+  @@index([transactionId])
+  @@index([paymentStatus])
+}
+
+model Refund {
+  id              String        @id @default(uuid())
+  paymentId       String
+  orderId         String
+  refundAmount    Float
+  refundReason    String        @db.Text
+  refundStatus    RefundStatus  @default(PENDING)
+  processedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  payment         Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([orderId])
+  @@index([refundStatus])
+}

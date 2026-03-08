@@ -1,0 +1,17 @@
+// ============================================
+// MODELS
+// ============================================
+
+model Inventory {
+  id               String   @id @default(uuid())
+  variantId        String   @unique
+  stockQuantity    Int      @default(0)
+  reservedStock    Int      @default(0)
+  availableStock   Int      @default(0)
+  reorderThreshold Int
+  lastUpdated      DateTime @updatedAt
+
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([variantId])
+}
