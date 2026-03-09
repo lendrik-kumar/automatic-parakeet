@@ -43,5 +43,5 @@ schemaFiles.forEach((file, index) => {
 });
 
 // Write to main schema.prisma
-fs.writeFileSync(mainSchema, combinedContent);
-console.log(`✅ Schema combined successfully: ${mainSchema}`);
+// fs.writeFileSync(mainSchema, combinedContent);
+// console.log(`✅ Schema combined successfully: ${mainSchema}`);
