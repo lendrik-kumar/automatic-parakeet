@@ -6,16 +6,9 @@ import {
 import { adminRepository } from "../repositories/admin.repository.js";
 import { slugify } from "../utils/slugify.js";
 import type { CategoryStatus } from "../generated/prisma/enums.js";
+import { AppError } from "../utils/AppError.js";
 
-export class CategoryError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "CategoryError";
-  }
-}
+export class CategoryError extends AppError {}
 
 export const listCategories = async (
   page = 1,

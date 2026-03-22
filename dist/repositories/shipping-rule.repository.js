@@ -1,5 +1,8 @@
 import prisma from "../lib/prisma.js";
 export const shippingRuleRepository = {
+    findById: (id) => prisma.shippingRule.findUnique({
+        where: { id },
+    }),
     findMatchingRule: async (orderTotal, region) => {
         const whereBase = {
             isActive: true,
@@ -33,6 +36,9 @@ export const shippingRuleRepository = {
         }),
         prisma.shippingRule.count(),
     ]),
+    createMany: (data) => prisma.shippingRule.createMany({
+        data,
+    }),
     create: (data) => prisma.shippingRule.create({ data }),
     update: (id, data) => prisma.shippingRule.update({ where: { id }, data }),
     delete: (id) => prisma.shippingRule.delete({ where: { id } }),

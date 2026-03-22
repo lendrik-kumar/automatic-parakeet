@@ -1,27 +1,5 @@
 import { z } from "zod";
 import * as svc from "../services/product.service.js";
-import { ProductError } from "../services/product.service.js";
-// ─── Error Handler ────────────────────────────────────────────────────────────
-const handleError = (res, error) => {
-    if (error instanceof z.ZodError) {
-        res
-            .status(400)
-            .json({
-            success: false,
-            message: "Validation error",
-            errors: error.issues,
-        });
-        return;
-    }
-    if (error instanceof ProductError) {
-        res
-            .status(error.statusCode)
-            .json({ success: false, message: error.message });
-        return;
-    }
-    console.error("[ProductController]", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-};
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 const createProductSchema = z.object({
     name: z.string().min(1),
@@ -105,7 +83,7 @@ const sizeGuideSchema = z.object({
 // ADMIN HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
 /** POST /admin/products */
-export const adminCreateProduct = async (req, res) => {
+export const adminCreateProduct = async (req, res, next) => {
     try {
         const data = createProductSchema.parse(req.body);
         const product = await svc.createProduct(req.admin.id, data);
@@ -114,11 +92,11 @@ export const adminCreateProduct = async (req, res) => {
             .json({ success: true, message: "Product created", data: { product } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/products */
-export const adminListProducts = async (req, res) => {
+export const adminListProducts = async (req, res, next) => {
     try {
         const result = await svc.listProducts({
             page: Number(req.query.page) || undefined,
@@ -143,21 +121,21 @@ export const adminListProducts = async (req, res) => {
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/products/:productId */
-export const adminGetProduct = async (req, res) => {
+export const adminGetProduct = async (req, res, next) => {
     try {
         const product = await svc.getProduct(req.params.productId);
         res.status(200).json({ success: true, data: { product } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PATCH /admin/products/:productId */
-export const adminUpdateProduct = async (req, res) => {
+export const adminUpdateProduct = async (req, res, next) => {
     try {
         const data = updateProductSchema.parse(req.body);
         const product = await svc.updateProduct(req.admin.id, req.params.productId, data);
@@ -166,21 +144,21 @@ export const adminUpdateProduct = async (req, res) => {
             .json({ success: true, message: "Product updated", data: { product } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /admin/products/:productId */
-export const adminDeleteProduct = async (req, res) => {
+export const adminDeleteProduct = async (req, res, next) => {
     try {
         await svc.archiveProduct(req.admin.id, req.params.productId);
         res.status(200).json({ success: true, message: "Product archived" });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PATCH /admin/products/:productId/status */
-export const adminUpdateProductStatus = async (req, res) => {
+export const adminUpdateProductStatus = async (req, res, next) => {
     try {
         const { status } = statusSchema.parse(req.body);
         const product = await svc.updateProductStatus(req.admin.id, req.params.productId, status);
@@ -189,11 +167,11 @@ export const adminUpdateProductStatus = async (req, res) => {
             .json({ success: true, message: "Status updated", data: { product } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /admin/products/bulk/status */
-export const adminBulkUpdateProductStatus = async (req, res) => {
+export const adminBulkUpdateProductStatus = async (req, res, next) => {
     try {
         const { productIds, status } = bulkStatusSchema.parse(req.body);
         const result = await svc.bulkUpdateProductStatus(req.admin.id, productIds, status);
@@ -204,11 +182,11 @@ export const adminBulkUpdateProductStatus = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /admin/products/bulk/feature */
-export const adminBulkToggleFeatured = async (req, res) => {
+export const adminBulkToggleFeatured = async (req, res, next) => {
     try {
         const { productIds, featuredProduct } = bulkFeatureSchema.parse(req.body);
         const result = await svc.bulkToggleFeaturedProducts(req.admin.id, productIds, featuredProduct);
@@ -219,11 +197,11 @@ export const adminBulkToggleFeatured = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /admin/products/bulk/new-arrival */
-export const adminBulkToggleNewArrival = async (req, res) => {
+export const adminBulkToggleNewArrival = async (req, res, next) => {
     try {
         const { productIds, newArrival } = bulkNewArrivalSchema.parse(req.body);
         const result = await svc.bulkToggleNewArrivalProducts(req.admin.id, productIds, newArrival);
@@ -234,11 +212,11 @@ export const adminBulkToggleNewArrival = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /admin/products/bulk/prices */
-export const adminBulkUpdateProductPrices = async (req, res) => {
+export const adminBulkUpdateProductPrices = async (req, res, next) => {
     try {
         const { updates } = bulkPriceSchema.parse(req.body);
         const result = await svc.bulkUpdateProductPrices(req.admin.id, updates);
@@ -249,22 +227,22 @@ export const adminBulkUpdateProductPrices = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/products/analytics */
-export const adminProductAnalytics = async (req, res) => {
+export const adminProductAnalytics = async (req, res, next) => {
     try {
         const data = await svc.getAdminProductAnalytics();
         res.status(200).json({ success: true, data });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 // ── Variants ────────────────────────────────────────────────────────────────
 /** POST /admin/products/:productId/variants */
-export const adminCreateVariant = async (req, res) => {
+export const adminCreateVariant = async (req, res, next) => {
     try {
         const data = createVariantSchema.parse(req.body);
         const variant = await svc.createVariant(req.admin.id, req.params.productId, data);
@@ -273,11 +251,11 @@ export const adminCreateVariant = async (req, res) => {
             .json({ success: true, message: "Variant created", data: { variant } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PATCH /admin/variants/:variantId */
-export const adminUpdateVariant = async (req, res) => {
+export const adminUpdateVariant = async (req, res, next) => {
     try {
         const data = updateVariantSchema.parse(req.body);
         const variant = await svc.updateVariant(req.admin.id, req.params.variantId, data);
@@ -286,22 +264,22 @@ export const adminUpdateVariant = async (req, res) => {
             .json({ success: true, message: "Variant updated", data: { variant } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /admin/variants/:variantId */
-export const adminDeleteVariant = async (req, res) => {
+export const adminDeleteVariant = async (req, res, next) => {
     try {
         await svc.archiveVariant(req.admin.id, req.params.variantId);
         res.status(200).json({ success: true, message: "Variant archived" });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 // ── Images ──────────────────────────────────────────────────────────────────
 /** POST /admin/products/:productId/images */
-export const adminAddImages = async (req, res) => {
+export const adminAddImages = async (req, res, next) => {
     try {
         const { images } = createImageSchema.parse(req.body);
         const result = await svc.addProductImages(req.admin.id, req.params.productId, images);
@@ -310,22 +288,22 @@ export const adminAddImages = async (req, res) => {
             .json({ success: true, message: "Images added", data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /admin/images/:imageId */
-export const adminDeleteImage = async (req, res) => {
+export const adminDeleteImage = async (req, res, next) => {
     try {
         await svc.deleteProductImage(req.admin.id, req.params.imageId);
         res.status(200).json({ success: true, message: "Image deleted" });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 // ── Specifications ──────────────────────────────────────────────────────────
 /** PUT /admin/products/:productId/specifications */
-export const adminUpdateSpecification = async (req, res) => {
+export const adminUpdateSpecification = async (req, res, next) => {
     try {
         const data = specificationSchema.parse(req.body);
         const spec = await svc.updateSpecification(req.admin.id, req.params.productId, data);
@@ -338,12 +316,12 @@ export const adminUpdateSpecification = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 // ── Size Guides ─────────────────────────────────────────────────────────────
 /** POST /admin/products/:productId/size-guides */
-export const adminCreateSizeGuide = async (req, res) => {
+export const adminCreateSizeGuide = async (req, res, next) => {
     try {
         const data = sizeGuideSchema.parse(req.body);
         const guide = await svc.createSizeGuide(req.admin.id, req.params.productId, data);
@@ -356,24 +334,24 @@ export const adminCreateSizeGuide = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /admin/size-guides/:sizeGuideId */
-export const adminDeleteSizeGuide = async (req, res) => {
+export const adminDeleteSizeGuide = async (req, res, next) => {
     try {
         await svc.deleteSizeGuide(req.admin.id, req.params.sizeGuideId);
         res.status(200).json({ success: true, message: "Size guide removed" });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 // ═══════════════════════════════════════════════════════════════════════════════
 // CLIENT HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
 /** GET /products */
-export const clientListProducts = async (req, res) => {
+export const clientListProducts = async (req, res, next) => {
     try {
         const result = await svc.listClientProducts({
             page: Number(req.query.page) || undefined,
@@ -394,81 +372,81 @@ export const clientListProducts = async (req, res) => {
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/featured */
-export const clientFeaturedProducts = async (req, res) => {
+export const clientFeaturedProducts = async (req, res, next) => {
     try {
         const products = await svc.getFeaturedProducts(Number(req.query.limit) || undefined);
         res.status(200).json({ success: true, data: { products } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/new-arrivals */
-export const clientNewArrivals = async (req, res) => {
+export const clientNewArrivals = async (req, res, next) => {
     try {
         const products = await svc.getNewArrivals(Number(req.query.limit) || undefined);
         res.status(200).json({ success: true, data: { products } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/search */
-export const clientSearchProducts = async (req, res) => {
+export const clientSearchProducts = async (req, res, next) => {
     try {
         const result = await svc.searchProducts(req.query.q, Number(req.query.page) || 1, Number(req.query.limit) || 20);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/best-sellers */
-export const clientBestSellers = async (req, res) => {
+export const clientBestSellers = async (req, res, next) => {
     try {
         const result = await svc.getBestSellers(Number(req.query.page) || 1, Number(req.query.limit) || 20);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/trending */
-export const clientTrendingProducts = async (req, res) => {
+export const clientTrendingProducts = async (req, res, next) => {
     try {
         const result = await svc.getTrendingProducts(Number(req.query.page) || 1, Number(req.query.limit) || 20);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/filters */
-export const clientGetFilterOptions = async (_req, res) => {
+export const clientGetFilterOptions = async (_req, res, next) => {
     try {
         const result = await svc.getFilterOptions();
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/categories */
-export const clientGetAllCategories = async (_req, res) => {
+export const clientGetAllCategories = async (_req, res, next) => {
     try {
         const categories = await svc.getAllCategories();
         res.status(200).json({ success: true, data: { categories } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/categories/:category */
-export const clientGetProductsByCategory = async (req, res) => {
+export const clientGetProductsByCategory = async (req, res, next) => {
     try {
         const result = await svc.getProductsByCategory(req.params.category, {
             page: Number(req.query.page) || 1,
@@ -486,11 +464,11 @@ export const clientGetProductsByCategory = async (req, res) => {
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/categories/:category/:subCategory */
-export const clientGetSubCategoryProducts = async (req, res) => {
+export const clientGetSubCategoryProducts = async (req, res, next) => {
     try {
         const result = await svc.getSubCategoryProducts(req.params.category, req.params.subCategory, {
             page: Number(req.query.page) || 1,
@@ -507,21 +485,21 @@ export const clientGetSubCategoryProducts = async (req, res) => {
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/collections */
-export const clientGetCollections = async (_req, res) => {
+export const clientGetCollections = async (_req, res, next) => {
     try {
         const collections = await svc.getCollections();
         res.status(200).json({ success: true, data: { collections } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/collections/:collection */
-export const clientGetProductsByCollection = async (req, res) => {
+export const clientGetProductsByCollection = async (req, res, next) => {
     try {
         const result = await svc.getProductsByCollection(req.params.collection, {
             page: Number(req.query.page) || 1,
@@ -540,66 +518,66 @@ export const clientGetProductsByCollection = async (req, res) => {
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/:productId/variants */
-export const clientGetVariants = async (req, res) => {
+export const clientGetVariants = async (req, res, next) => {
     try {
         const variants = await svc.getProductVariants(req.params.productId);
         res.status(200).json({ success: true, data: { variants } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/variant/:variantId */
-export const clientGetVariantDetails = async (req, res) => {
+export const clientGetVariantDetails = async (req, res, next) => {
     try {
         const variant = await svc.getVariantDetails(req.params.variantId);
         res.status(200).json({ success: true, data: { variant } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/:productId/related */
-export const clientRelatedProducts = async (req, res) => {
+export const clientRelatedProducts = async (req, res, next) => {
     try {
         const result = await svc.getRelatedProducts(req.params.productId, Number(req.query.limit) || 8);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/:productId/similar */
-export const clientSimilarProducts = async (req, res) => {
+export const clientSimilarProducts = async (req, res, next) => {
     try {
         const result = await svc.getSimilarProducts(req.params.productId, Number(req.query.limit) || 8);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/recommendations/personalized */
-export const clientPersonalizedProducts = async (req, res) => {
+export const clientPersonalizedProducts = async (req, res, next) => {
     try {
         const result = await svc.getPersonalizedProducts(req.user.id, Number(req.query.limit) || 20);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /products/:slug */
-export const clientGetProduct = async (req, res) => {
+export const clientGetProduct = async (req, res, next) => {
     try {
         const product = await svc.getProductBySlug(req.params.slug);
         res.status(200).json({ success: true, data: { product } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };

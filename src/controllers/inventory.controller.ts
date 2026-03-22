@@ -1,28 +1,6 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/inventory.service.js";
-import { InventoryError } from "../services/inventory.service.js";
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof InventoryError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[InventoryController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const updateInventorySchema = z.object({
   stockQuantity: z.number().int().min(0).optional(),
@@ -41,10 +19,23 @@ const bulkInventorySchema = z.object({
     .min(1),
 });
 
+const bulkImportSchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        variantId: z.string().uuid(),
+        stockQuantity: z.number().int().min(0),
+        reorderThreshold: z.number().int().min(0),
+      }),
+    )
+    .min(1),
+});
+
 /** GET /admin/inventory */
 export const listInventory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listInventoryAdvanced(
@@ -58,7 +49,7 @@ export const listInventory = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -66,12 +57,13 @@ export const listInventory = async (
 export const getInventory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const inventory = await svc.getInventory(req.params.variantId);
     res.status(200).json({ success: true, data: { inventory } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -79,6 +71,7 @@ export const getInventory = async (
 export const updateInventory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateInventorySchema.parse(req.body);
@@ -95,7 +88,7 @@ export const updateInventory = async (
         data: { inventory },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -103,6 +96,7 @@ export const updateInventory = async (
 export const bulkUpdateInventory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { updates } = bulkInventorySchema.parse(req.body);
@@ -113,7 +107,7 @@ export const bulkUpdateInventory = async (
       data: { updatedCount: result.length },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -121,11 +115,59 @@ export const bulkUpdateInventory = async (
 export const getInventoryAlerts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = await svc.getInventoryAlerts(Number(req.query.limit) || 50);
     res.status(200).json({ success: true, data });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** POST /admin/inventory/bulk/import */
+export const bulkImportInventory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { rows } = bulkImportSchema.parse(req.body);
+    const result = await svc.bulkImportInventory(req.admin!.id, rows);
+    res.status(200).json({
+      success: true,
+      message: "Inventory imported",
+      data: result,
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/inventory/:variantId/history */
+export const getInventoryHistory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const history = await svc.getInventoryHistory(req.params.variantId);
+    res.status(200).json({ success: true, data: history });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/inventory/forecast */
+export const getInventoryForecast = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const forecast = await svc.getInventoryForecast();
+    res.status(200).json({ success: true, data: forecast });
+  } catch (e) {
+    next(e);
   }
 };

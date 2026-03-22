@@ -1,16 +1,9 @@
 import { couponRepository } from "../repositories/coupon.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import type { CouponStatus, DiscountType } from "../generated/prisma/enums.js";
+import { AppError } from "../utils/AppError.js";
 
-export class CouponError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "CouponError";
-  }
-}
+export class CouponError extends AppError {}
 
 export const createCoupon = async (
   adminId: string,

@@ -518,6 +518,9 @@ async function main() {
   // CLEAR ALL TABLES (in dependency order)
   // ============================================
   console.log("🗑️  Clearing database...");
+  await prisma.priceAlert.deleteMany();
+  await prisma.savedPaymentMethod.deleteMany();
+  await prisma.orderStatusHistory.deleteMany();
   await prisma.returnItem.deleteMany();
   await prisma.returnRequest.deleteMany();
   await prisma.refund.deleteMany();
@@ -543,6 +546,8 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.coupon.deleteMany();
   await prisma.shippingMethod.deleteMany();
+  await prisma.shippingRule.deleteMany();
+  await prisma.taxRule.deleteMany();
   await prisma.adminActivityLog.deleteMany();
   await prisma.adminSession.deleteMany();
   await prisma.admin.deleteMany();
@@ -658,6 +663,18 @@ async function main() {
         phoneNumber: `+1${rand(2000000000, 9999999999)}`,
         gender: pick(userGenders),
         dateOfBirth,
+        profileImage: nextImg(200, 200),
+        loyaltyPoints: rand(0, 2000),
+        referralCode: `REF${(i + 1).toString().padStart(4, "0")}`,
+        preferences: JSON.stringify({
+          emailMarketing: Math.random() > 0.4,
+          smsAlerts: Math.random() > 0.5,
+          currency: "USD",
+        }),
+        deletedAt:
+          i === 29
+            ? new Date(Date.now() - rand(10, 60) * 24 * 60 * 60 * 1000)
+            : null,
         status: i < 28 ? "ACTIVE" : i === 28 ? "SUSPENDED" : "DELETED",
         emailVerified: i < 25,
         phoneVerified: i < 20,
@@ -683,6 +700,11 @@ async function main() {
           landmark: a === 0 ? "Near Downtown" : null,
           latitude: randFloat(25, 48, 6),
           longitude: randFloat(-125, -66, 6),
+          validated: Math.random() > 0.15,
+          validatedAt:
+            Math.random() > 0.15
+              ? new Date(Date.now() - rand(1, 120) * 24 * 60 * 60 * 1000)
+              : null,
           isDefaultShipping: a === 0,
           isDefaultBilling: a === 0,
         },
@@ -744,6 +766,55 @@ async function main() {
   await prisma.shippingMethod.createMany({ data: shippingMethodsData });
   const shippingMethods = await prisma.shippingMethod.findMany();
   console.log(`✅ ${shippingMethods.length} shipping methods created`);
+
+  // ============================================
+  // TAX + SHIPPING RULES
+  // ============================================
+  console.log("🧾 Creating tax and shipping rules...");
+  await prisma.taxRule.createMany({
+    data: [
+      { name: "US Default GST", region: "US", taxRate: 0.07, isActive: true, priority: 1 },
+      { name: "California Tax", region: "CA", taxRate: 0.0825, isActive: true, priority: 10 },
+      { name: "New York Tax", region: "NY", taxRate: 0.08875, isActive: true, priority: 10 },
+      { name: "Fallback Tax", region: null, taxRate: 0.05, isActive: true, priority: 0 },
+    ],
+  });
+
+  await prisma.shippingRule.createMany({
+    data: [
+      {
+        name: "US Standard",
+        region: "US",
+        minimumOrder: 0,
+        maximumOrder: 99.99,
+        shippingCost: 7.99,
+        isFreeShipping: false,
+        isActive: true,
+        priority: 5,
+      },
+      {
+        name: "US Free Shipping",
+        region: "US",
+        minimumOrder: 100,
+        maximumOrder: null,
+        shippingCost: 0,
+        isFreeShipping: true,
+        isActive: true,
+        priority: 10,
+      },
+      {
+        name: "Global Fallback",
+        region: null,
+        minimumOrder: 0,
+        maximumOrder: null,
+        shippingCost: 12.99,
+        isFreeShipping: false,
+        isActive: true,
+        priority: 0,
+      },
+    ],
+  });
+  console.log("✅ Tax and shipping rules created");
 
   // ============================================
   // COUPONS (10)
@@ -918,6 +989,16 @@ async function main() {
         brand: t.brand,
         description: descriptions[t.shoeType] || descriptions["LIFESTYLE"],
         shortDescription: `${t.brand} ${t.name} — ${t.category}`,
+        metaTitle: `${t.name} by ${t.brand} | Sprint Shoes`,
+        metaDescription: `${t.name} in ${t.category} category. Premium comfort and performance from ${t.brand}.`,
+        metaKeywords: `${t.brand}, ${t.name}, ${t.category}, ${t.shoeType.toLowerCase()}, shoes`,
+        sku: `PROD-${(i + 1).toString().padStart(4, "0")}`,
+        weight: randFloat(220, 480),
+        dimensions: JSON.stringify({
+          lengthCm: randFloat(28, 36),
+          widthCm: randFloat(10, 15),
+          heightCm: randFloat(9, 14),
+        }),
         gender,
         shoeType: t.shoeType,
         category: t.category,
@@ -1145,6 +1226,40 @@ async function main() {
     }
   }
   console.log(`✅ ${wishlistItemCount} wishlist items added`);
+
+  // ============================================
+  // PRICE ALERTS
+  // ============================================
+  console.log("🔔 Creating price alerts...");
+  let priceAlertCount = 0;
+  for (const user of activeUsers) {
+    const wishlist = await prisma.wishlist.findUnique({ where: { customerId: user.id } });
+    if (!wishlist) continue;
+    const wishlistItems = await prisma.wishlistItem.findMany({
+      where: { wishlistId: wishlist.id },
+      take: rand(0, 3),
+    });
+    for (const wi of wishlistItems) {
+      const variant = wi.variantId
+        ? await prisma.productVariant.findUnique({ where: { id: wi.variantId } })
+        : await prisma.productVariant.findFirst({ where: { productId: wi.productId } });
+      const currentPrice = variant?.price ?? randFloat(60, 200);
+      const targetPrice = Math.max(1, parseFloat((currentPrice - randFloat(5, 25)).toFixed(2)));
+      await prisma.priceAlert.create({
+        data: {
+          userId: user.id,
+          productId: wi.productId,
+          wishlistItemId: wi.id,
+          currentPrice,
+          targetPrice,
+          isActive: Math.random() > 0.2,
+          triggeredAt: Math.random() > 0.85 ? new Date(Date.now() - rand(1, 20) * DAY) : null,
+        },
+      });
+      priceAlertCount++;
+    }
+  }
+  console.log(`✅ ${priceAlertCount} price alerts created`);
 
   // ============================================
   // ORDERS (40 orders across various statuses)

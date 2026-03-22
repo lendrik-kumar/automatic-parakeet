@@ -1,28 +1,6 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/coupon.service.js";
-import { CouponError } from "../services/coupon.service.js";
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof CouponError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[CouponController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const createCouponSchema = z.object({
   code: z.string().min(1).max(50),
@@ -55,6 +33,7 @@ const validateCouponSchema = z.object({
 export const createCoupon = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createCouponSchema.parse(req.body);
@@ -63,7 +42,7 @@ export const createCoupon = async (
       .status(201)
       .json({ success: true, message: "Coupon created", data: { coupon } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -71,6 +50,7 @@ export const createCoupon = async (
 export const listCoupons = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listCoupons(
@@ -79,17 +59,17 @@ export const listCoupons = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** GET /admin/coupons/:couponId */
-export const getCoupon = async (req: Request, res: Response): Promise<void> => {
+export const getCoupon = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const coupon = await svc.getCoupon(req.params.couponId);
     res.status(200).json({ success: true, data: { coupon } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -97,6 +77,7 @@ export const getCoupon = async (req: Request, res: Response): Promise<void> => {
 export const updateCoupon = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateCouponSchema.parse(req.body);
@@ -109,7 +90,7 @@ export const updateCoupon = async (
       .status(200)
       .json({ success: true, message: "Coupon updated", data: { coupon } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -117,12 +98,13 @@ export const updateCoupon = async (
 export const deleteCoupon = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteCoupon(req.admin!.id, req.params.couponId);
     res.status(200).json({ success: true, message: "Coupon deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -130,6 +112,7 @@ export const deleteCoupon = async (
 export const updateCouponStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = couponStatusSchema.parse(req.body);
@@ -142,7 +125,7 @@ export const updateCouponStatus = async (
       .status(200)
       .json({ success: true, message: "Coupon status updated", data: { coupon } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -150,12 +133,13 @@ export const updateCouponStatus = async (
 export const getCouponUsageStats = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const stats = await svc.getCouponUsageStats(req.params.couponId);
     res.status(200).json({ success: true, data: { stats } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -165,12 +149,13 @@ export const getCouponUsageStats = async (
 export const validateCoupon = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { code, orderTotal } = validateCouponSchema.parse(req.body);
     const result = await svc.validateCoupon(code, orderTotal);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

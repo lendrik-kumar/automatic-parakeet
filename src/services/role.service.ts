@@ -4,16 +4,9 @@ import {
   type UpdateRoleInput,
 } from "../repositories/role.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
+import { AppError } from "../utils/AppError.js";
 
-export class RoleError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "RoleError";
-  }
-}
+export class RoleError extends AppError {}
 
 export const listRoles = async () => {
   return roleRepository.findAll();

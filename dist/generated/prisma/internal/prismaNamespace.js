@@ -100,7 +100,10 @@ export const ModelName = {
     UserSession: 'UserSession',
     Address: 'Address',
     Wishlist: 'Wishlist',
-    WishlistItem: 'WishlistItem'
+    WishlistItem: 'WishlistItem',
+    SavedPaymentMethod: 'SavedPaymentMethod',
+    PriceAlert: 'PriceAlert',
+    OrderStatusHistory: 'OrderStatusHistory'
 };
 /**
  * Enums
@@ -160,6 +163,10 @@ export const CouponScalarFieldEnum = {
     maximumDiscount: 'maximumDiscount',
     usageLimit: 'usageLimit',
     usedCount: 'usedCount',
+    maxUsesPerUser: 'maxUsesPerUser',
+    isFirstPurchaseOnly: 'isFirstPurchaseOnly',
+    applicableCategories: 'applicableCategories',
+    excludedProducts: 'excludedProducts',
     startDate: 'startDate',
     expiryDate: 'expiryDate',
     status: 'status',
@@ -246,6 +253,13 @@ export const OrderScalarFieldEnum = {
     discountAmount: 'discountAmount',
     totalAmount: 'totalAmount',
     currency: 'currency',
+    notes: 'notes',
+    trackingUrl: 'trackingUrl',
+    estimatedDelivery: 'estimatedDelivery',
+    deliveredAt: 'deliveredAt',
+    cancellationReason: 'cancellationReason',
+    cancelledAt: 'cancelledAt',
+    cancelledBy: 'cancelledBy',
     placedAt: 'placedAt',
     updatedAt: 'updatedAt'
 };
@@ -317,6 +331,12 @@ export const ProductScalarFieldEnum = {
     brand: 'brand',
     description: 'description',
     shortDescription: 'shortDescription',
+    metaTitle: 'metaTitle',
+    metaDescription: 'metaDescription',
+    metaKeywords: 'metaKeywords',
+    sku: 'sku',
+    weight: 'weight',
+    dimensions: 'dimensions',
     gender: 'gender',
     shoeType: 'shoeType',
     category: 'category',
@@ -454,6 +474,12 @@ export const UserScalarFieldEnum = {
     phoneNumber: 'phoneNumber',
     gender: 'gender',
     dateOfBirth: 'dateOfBirth',
+    profileImage: 'profileImage',
+    loyaltyPoints: 'loyaltyPoints',
+    referralCode: 'referralCode',
+    referredById: 'referredById',
+    preferences: 'preferences',
+    deletedAt: 'deletedAt',
     status: 'status',
     emailVerified: 'emailVerified',
     phoneVerified: 'phoneVerified',
@@ -483,6 +509,8 @@ export const AddressScalarFieldEnum = {
     landmark: 'landmark',
     latitude: 'latitude',
     longitude: 'longitude',
+    validated: 'validated',
+    validatedAt: 'validatedAt',
     isDefaultShipping: 'isDefaultShipping',
     isDefaultBilling: 'isDefaultBilling',
     createdAt: 'createdAt',
@@ -500,6 +528,47 @@ export const WishlistItemScalarFieldEnum = {
     productId: 'productId',
     variantId: 'variantId',
     addedAt: 'addedAt'
+};
+export const SavedPaymentMethodScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    provider: 'provider',
+    paymentMethod: 'paymentMethod',
+    token: 'token',
+    cardBrand: 'cardBrand',
+    cardLast4: 'cardLast4',
+    cardExpMonth: 'cardExpMonth',
+    cardExpYear: 'cardExpYear',
+    upiId: 'upiId',
+    isDefault: 'isDefault',
+    isActive: 'isActive',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+export const PriceAlertScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    productId: 'productId',
+    wishlistItemId: 'wishlistItemId',
+    targetPrice: 'targetPrice',
+    currentPrice: 'currentPrice',
+    isActive: 'isActive',
+    triggeredAt: 'triggeredAt',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+export const OrderStatusHistoryScalarFieldEnum = {
+    id: 'id',
+    orderId: 'orderId',
+    fromOrderStatus: 'fromOrderStatus',
+    toOrderStatus: 'toOrderStatus',
+    fromPaymentStatus: 'fromPaymentStatus',
+    toPaymentStatus: 'toPaymentStatus',
+    fromFulfillmentStatus: 'fromFulfillmentStatus',
+    toFulfillmentStatus: 'toFulfillmentStatus',
+    note: 'note',
+    changedByAdminId: 'changedByAdminId',
+    changedAt: 'changedAt'
 };
 export const SortOrder = {
     asc: 'asc',

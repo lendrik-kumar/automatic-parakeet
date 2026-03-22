@@ -36,6 +36,9 @@ import {
   updateInventory,
   bulkUpdateInventory,
   getInventoryAlerts,
+  bulkImportInventory,
+  getInventoryHistory,
+  getInventoryForecast,
 } from "../controllers/inventory.controller.js";
 import {
   adminListOrders,
@@ -44,6 +47,10 @@ import {
   adminGetOrderTimeline,
   adminUpdateOrderStatus,
   adminBulkUpdateOrderStatus,
+  adminFulfillmentQueue,
+  adminDelayedOrders,
+  adminBulkAssignCourier,
+  adminExportOrders,
 } from "../controllers/order.controller.js";
 import {
   createMethod,
@@ -65,10 +72,31 @@ import {
   deleteCoupon,
 } from "../controllers/coupon.controller.js";
 import {
+  createTaxRule,
+  listTaxRules,
+  getTaxRule,
+  updateTaxRule,
+  deleteTaxRule,
+  bulkCreateTaxRules,
+  testTaxRule,
+} from "../controllers/tax-rule.controller.js";
+import {
+  createShippingRule,
+  listShippingRules,
+  getShippingRule,
+  updateShippingRule,
+  deleteShippingRule,
+  bulkCreateShippingRules,
+  testShippingRule,
+} from "../controllers/shipping-rule.controller.js";
+import {
   adminListReturns,
   adminGetReturn,
   adminBulkApproveReturns,
   adminUpdateReturn,
+  adminReturnAnalytics,
+  adminBulkProcessReturns,
+  adminExportReturns,
 } from "../controllers/return.controller.js";
 import {
   createRefund,
@@ -76,6 +104,9 @@ import {
   bulkProcessRefunds,
   updateRefundStatus,
   listRefunds,
+  refundAnalytics,
+  retryRefund,
+  exportRefunds,
 } from "../controllers/refund.controller.js";
 import {
   adminDeleteReview,
@@ -90,6 +121,10 @@ import {
 } from "../controllers/review.controller.js";
 import {
   listUsers,
+  exportUsers,
+  getUserSegments,
+  getUserStats,
+  getUserLifetimeValue,
   getUser,
   updateUser,
   updateUserStatus,
@@ -119,6 +154,11 @@ import {
   customerAnalytics,
   revenueAnalytics,
   inventoryAnalytics,
+  conversionFunnelAnalytics,
+  abandonedCartsAnalytics,
+  refundsAnalytics,
+  shippingPerformanceAnalytics,
+  cohortsAnalytics,
 } from "../controllers/analytics.controller.js";
 import {
   listCollections,
@@ -308,11 +348,29 @@ adminRouter.get(
   generalLimiter,
   getInventoryAlerts,
 );
+adminRouter.get(
+  "/inventory/forecast",
+  authenticateAdmin,
+  generalLimiter,
+  getInventoryForecast,
+);
 adminRouter.post(
   "/inventory/bulk/update",
   authenticateAdmin,
   generalLimiter,
   bulkUpdateInventory,
+);
+adminRouter.post(
+  "/inventory/bulk/import",
+  authenticateAdmin,
+  generalLimiter,
+  bulkImportInventory,
+);
+adminRouter.get(
+  "/inventory/:variantId/history",
+  authenticateAdmin,
+  generalLimiter,
+  getInventoryHistory,
 );
 adminRouter.get(
   "/inventory/:variantId",
@@ -329,6 +387,24 @@ adminRouter.put(
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
 adminRouter.get(
+  "/orders/fulfillment-queue",
+  authenticateAdmin,
+  generalLimiter,
+  adminFulfillmentQueue,
+);
+adminRouter.get(
+  "/orders/delayed",
+  authenticateAdmin,
+  generalLimiter,
+  adminDelayedOrders,
+);
+adminRouter.get(
+  "/orders/export",
+  authenticateAdmin,
+  generalLimiter,
+  adminExportOrders,
+);
+adminRouter.get(
   "/orders/search",
   authenticateAdmin,
   generalLimiter,
@@ -340,6 +416,12 @@ adminRouter.post(
   authenticateAdmin,
   generalLimiter,
   adminBulkUpdateOrderStatus,
+);
+adminRouter.post(
+  "/orders/bulk/assign-courier",
+  authenticateAdmin,
+  generalLimiter,
+  adminBulkAssignCourier,
 );
 adminRouter.get(
   "/orders/:orderId",
@@ -446,6 +528,84 @@ adminRouter.delete(
   deleteCoupon,
 );
 
+// ─── Tax Rules ────────────────────────────────────────────────────────────────
+adminRouter.post("/tax-rules", authenticateAdmin, generalLimiter, createTaxRule);
+adminRouter.get("/tax-rules", authenticateAdmin, generalLimiter, listTaxRules);
+adminRouter.get(
+  "/tax-rules/:taxRuleId",
+  authenticateAdmin,
+  generalLimiter,
+  getTaxRule,
+);
+adminRouter.put(
+  "/tax-rules/:taxRuleId",
+  authenticateAdmin,
+  generalLimiter,
+  updateTaxRule,
+);
+adminRouter.delete(
+  "/tax-rules/:taxRuleId",
+  authenticateAdmin,
+  generalLimiter,
+  deleteTaxRule,
+);
+adminRouter.post(
+  "/tax-rules/bulk",
+  authenticateAdmin,
+  generalLimiter,
+  bulkCreateTaxRules,
+);
+adminRouter.post(
+  "/tax-rules/test",
+  authenticateAdmin,
+  generalLimiter,
+  testTaxRule,
+);
+
+// ─── Shipping Rules ───────────────────────────────────────────────────────────
+adminRouter.post(
+  "/shipping-rules",
+  authenticateAdmin,
+  generalLimiter,
+  createShippingRule,
+);
+adminRouter.get(
+  "/shipping-rules",
+  authenticateAdmin,
+  generalLimiter,
+  listShippingRules,
+);
+adminRouter.get(
+  "/shipping-rules/:shippingRuleId",
+  authenticateAdmin,
+  generalLimiter,
+  getShippingRule,
+);
+adminRouter.put(
+  "/shipping-rules/:shippingRuleId",
+  authenticateAdmin,
+  generalLimiter,
+  updateShippingRule,
+);
+adminRouter.delete(
+  "/shipping-rules/:shippingRuleId",
+  authenticateAdmin,
+  generalLimiter,
+  deleteShippingRule,
+);
+adminRouter.post(
+  "/shipping-rules/bulk",
+  authenticateAdmin,
+  generalLimiter,
+  bulkCreateShippingRules,
+);
+adminRouter.post(
+  "/shipping-rules/test",
+  authenticateAdmin,
+  generalLimiter,
+  testShippingRule,
+);
+
 // ─── Returns ──────────────────────────────────────────────────────────────────
 adminRouter.get(
   "/returns",
@@ -471,6 +631,24 @@ adminRouter.patch(
   generalLimiter,
   adminUpdateReturn,
 );
+adminRouter.get(
+  "/returns/analytics",
+  authenticateAdmin,
+  generalLimiter,
+  adminReturnAnalytics,
+);
+adminRouter.post(
+  "/returns/bulk/process",
+  authenticateAdmin,
+  generalLimiter,
+  adminBulkProcessReturns,
+);
+adminRouter.get(
+  "/returns/export",
+  authenticateAdmin,
+  generalLimiter,
+  adminExportReturns,
+);
 
 // ─── Refunds ──────────────────────────────────────────────────────────────────
 adminRouter.post("/refunds", authenticateAdmin, generalLimiter, createRefund);
@@ -492,6 +670,24 @@ adminRouter.post(
   authenticateAdmin,
   generalLimiter,
   bulkProcessRefunds,
+);
+adminRouter.get(
+  "/refunds/analytics",
+  authenticateAdmin,
+  generalLimiter,
+  refundAnalytics,
+);
+adminRouter.post(
+  "/refunds/:refundId/retry",
+  authenticateAdmin,
+  generalLimiter,
+  retryRefund,
+);
+adminRouter.get(
+  "/refunds/export",
+  authenticateAdmin,
+  generalLimiter,
+  exportRefunds,
 );
 
 // ─── Reviews Moderation ───────────────────────────────────────────────────────
@@ -542,6 +738,14 @@ adminRouter.delete(
 
 // ─── User Management ─────────────────────────────────────────────────────────
 adminRouter.get("/users", authenticateAdmin, generalLimiter, listUsers);
+adminRouter.get("/users/export", authenticateAdmin, generalLimiter, exportUsers);
+adminRouter.get(
+  "/users/segments",
+  authenticateAdmin,
+  generalLimiter,
+  getUserSegments,
+);
+adminRouter.get("/users/stats", authenticateAdmin, generalLimiter, getUserStats);
 adminRouter.post(
   "/users/bulk/status",
   authenticateAdmin,
@@ -561,6 +765,12 @@ adminRouter.post(
   authenticateAdmin,
   generalLimiter,
   resetUserPassword,
+);
+adminRouter.get(
+  "/users/:userId/lifetime-value",
+  authenticateAdmin,
+  generalLimiter,
+  getUserLifetimeValue,
 );
 adminRouter.get(
   "/users/:userId/orders",
@@ -787,6 +997,36 @@ adminRouter.get(
   authenticateAdmin,
   generalLimiter,
   inventoryAnalytics,
+);
+adminRouter.get(
+  "/analytics/conversion-funnel",
+  authenticateAdmin,
+  generalLimiter,
+  conversionFunnelAnalytics,
+);
+adminRouter.get(
+  "/analytics/abandoned-carts",
+  authenticateAdmin,
+  generalLimiter,
+  abandonedCartsAnalytics,
+);
+adminRouter.get(
+  "/analytics/refunds",
+  authenticateAdmin,
+  generalLimiter,
+  refundsAnalytics,
+);
+adminRouter.get(
+  "/analytics/shipping-performance",
+  authenticateAdmin,
+  generalLimiter,
+  shippingPerformanceAnalytics,
+);
+adminRouter.get(
+  "/analytics/cohorts",
+  authenticateAdmin,
+  generalLimiter,
+  cohortsAnalytics,
 );
 
 export default adminRouter;

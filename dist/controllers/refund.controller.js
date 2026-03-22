@@ -1,26 +1,5 @@
 import { z } from "zod";
 import * as svc from "../services/refund.service.js";
-import { RefundError } from "../services/refund.service.js";
-const handleError = (res, error) => {
-    if (error instanceof z.ZodError) {
-        res
-            .status(400)
-            .json({
-            success: false,
-            message: "Validation error",
-            errors: error.issues,
-        });
-        return;
-    }
-    if (error instanceof RefundError) {
-        res
-            .status(error.statusCode)
-            .json({ success: false, message: error.message });
-        return;
-    }
-    console.error("[RefundController]", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-};
 const createRefundSchema = z.object({
     paymentId: z.string().uuid(),
     orderId: z.string().uuid(),
@@ -34,8 +13,13 @@ const bulkRefundSchema = z.object({
     refundIds: z.array(z.string().uuid()).min(1),
     status: z.enum(["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"]),
 });
+const exportQuerySchema = z.object({
+    status: z.enum(["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"]).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+});
 /** POST /admin/refunds */
-export const createRefund = async (req, res) => {
+export const createRefund = async (req, res, next) => {
     try {
         const data = createRefundSchema.parse(req.body);
         const refund = await svc.createRefund(req.admin.id, data);
@@ -44,11 +28,11 @@ export const createRefund = async (req, res) => {
             .json({ success: true, message: "Refund created", data: { refund } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PATCH /admin/refunds/:refundId */
-export const updateRefundStatus = async (req, res) => {
+export const updateRefundStatus = async (req, res, next) => {
     try {
         const { status } = statusSchema.parse(req.body);
         const refund = await svc.updateRefundStatus(req.admin.id, req.params.refundId, status);
@@ -61,31 +45,31 @@ export const updateRefundStatus = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/refunds */
-export const listRefunds = async (req, res) => {
+export const listRefunds = async (req, res, next) => {
     try {
         const result = await svc.listRefunds(Number(req.query.page) || 1, Number(req.query.limit) || 20, req.query.status, req.query.search, req.query.startDate, req.query.endDate);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/refunds/:refundId */
-export const getRefund = async (req, res) => {
+export const getRefund = async (req, res, next) => {
     try {
         const refund = await svc.getRefund(req.params.refundId);
         res.status(200).json({ success: true, data: { refund } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /admin/refunds/bulk/process */
-export const bulkProcessRefunds = async (req, res) => {
+export const bulkProcessRefunds = async (req, res, next) => {
     try {
         const { refundIds, status } = bulkRefundSchema.parse(req.body);
         const result = await svc.bulkProcessRefunds(req.admin.id, refundIds, status);
@@ -96,6 +80,41 @@ export const bulkProcessRefunds = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
+    }
+};
+/** GET /admin/refunds/analytics */
+export const refundAnalytics = async (_req, res, next) => {
+    try {
+        const analytics = await svc.getRefundAnalytics();
+        res.status(200).json({ success: true, data: analytics });
+    }
+    catch (e) {
+        next(e);
+    }
+};
+/** POST /admin/refunds/:refundId/retry */
+export const retryRefund = async (req, res, next) => {
+    try {
+        const refund = await svc.retryRefund(req.admin.id, req.params.refundId);
+        res.status(200).json({
+            success: true,
+            message: "Refund retry initiated",
+            data: { refund },
+        });
+    }
+    catch (e) {
+        next(e);
+    }
+};
+/** GET /admin/refunds/export */
+export const exportRefunds = async (req, res, next) => {
+    try {
+        const filters = exportQuerySchema.parse(req.query);
+        const rows = await svc.exportRefunds(filters);
+        res.status(200).json({ success: true, data: { rows, count: rows.length } });
+    }
+    catch (e) {
+        next(e);
     }
 };

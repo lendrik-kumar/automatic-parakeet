@@ -1,0 +1,21 @@
+import router from "express";
+import {
+  listSavedPaymentMethods,
+  addSavedPaymentMethod,
+  removeSavedPaymentMethod,
+  setDefaultSavedPaymentMethod,
+} from "../controllers/payment-method.controller.js";
+import { authenticateUser } from "../middlewares/auth.middleware.js";
+import { generalLimiter } from "../middlewares/rateLimiter.middleware.js";
+
+const paymentMethodRouter = router.Router();
+
+paymentMethodRouter.use(authenticateUser);
+paymentMethodRouter.use(generalLimiter);
+
+paymentMethodRouter.get("/", listSavedPaymentMethods);
+paymentMethodRouter.post("/", addSavedPaymentMethod);
+paymentMethodRouter.delete("/:paymentMethodId", removeSavedPaymentMethod);
+paymentMethodRouter.patch("/:paymentMethodId/default", setDefaultSavedPaymentMethod);
+
+export default paymentMethodRouter;

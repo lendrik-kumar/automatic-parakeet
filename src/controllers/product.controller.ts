@@ -1,30 +1,6 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/product.service.js";
-import { ProductError } from "../services/product.service.js";
-
-// ─── Error Handler ────────────────────────────────────────────────────────────
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof ProductError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[ProductController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -130,6 +106,7 @@ const sizeGuideSchema = z.object({
 export const adminCreateProduct = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createProductSchema.parse(req.body);
@@ -138,7 +115,7 @@ export const adminCreateProduct = async (
       .status(201)
       .json({ success: true, message: "Product created", data: { product } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -146,6 +123,7 @@ export const adminCreateProduct = async (
 export const adminListProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listProducts({
@@ -172,7 +150,7 @@ export const adminListProducts = async (
     });
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -180,12 +158,13 @@ export const adminListProducts = async (
 export const adminGetProduct = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const product = await svc.getProduct(req.params.productId);
     res.status(200).json({ success: true, data: { product } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -193,6 +172,7 @@ export const adminGetProduct = async (
 export const adminUpdateProduct = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateProductSchema.parse(req.body);
@@ -205,7 +185,7 @@ export const adminUpdateProduct = async (
       .status(200)
       .json({ success: true, message: "Product updated", data: { product } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -213,12 +193,13 @@ export const adminUpdateProduct = async (
 export const adminDeleteProduct = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.archiveProduct(req.admin!.id, req.params.productId);
     res.status(200).json({ success: true, message: "Product archived" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -226,6 +207,7 @@ export const adminDeleteProduct = async (
 export const adminUpdateProductStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -238,7 +220,7 @@ export const adminUpdateProductStatus = async (
       .status(200)
       .json({ success: true, message: "Status updated", data: { product } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -246,6 +228,7 @@ export const adminUpdateProductStatus = async (
 export const adminBulkUpdateProductStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { productIds, status } = bulkStatusSchema.parse(req.body);
@@ -260,7 +243,7 @@ export const adminBulkUpdateProductStatus = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -268,6 +251,7 @@ export const adminBulkUpdateProductStatus = async (
 export const adminBulkToggleFeatured = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { productIds, featuredProduct } = bulkFeatureSchema.parse(req.body);
@@ -282,7 +266,7 @@ export const adminBulkToggleFeatured = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -290,6 +274,7 @@ export const adminBulkToggleFeatured = async (
 export const adminBulkToggleNewArrival = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { productIds, newArrival } = bulkNewArrivalSchema.parse(req.body);
@@ -304,7 +289,7 @@ export const adminBulkToggleNewArrival = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -312,6 +297,7 @@ export const adminBulkToggleNewArrival = async (
 export const adminBulkUpdateProductPrices = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { updates } = bulkPriceSchema.parse(req.body);
@@ -322,7 +308,7 @@ export const adminBulkUpdateProductPrices = async (
       data: { updatedCount: result.length },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -330,12 +316,13 @@ export const adminBulkUpdateProductPrices = async (
 export const adminProductAnalytics = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = await svc.getAdminProductAnalytics();
     res.status(200).json({ success: true, data });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -345,6 +332,7 @@ export const adminProductAnalytics = async (
 export const adminCreateVariant = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createVariantSchema.parse(req.body);
@@ -357,7 +345,7 @@ export const adminCreateVariant = async (
       .status(201)
       .json({ success: true, message: "Variant created", data: { variant } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -365,6 +353,7 @@ export const adminCreateVariant = async (
 export const adminUpdateVariant = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateVariantSchema.parse(req.body);
@@ -377,7 +366,7 @@ export const adminUpdateVariant = async (
       .status(200)
       .json({ success: true, message: "Variant updated", data: { variant } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -385,12 +374,13 @@ export const adminUpdateVariant = async (
 export const adminDeleteVariant = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.archiveVariant(req.admin!.id, req.params.variantId);
     res.status(200).json({ success: true, message: "Variant archived" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -400,6 +390,7 @@ export const adminDeleteVariant = async (
 export const adminAddImages = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { images } = createImageSchema.parse(req.body);
@@ -412,7 +403,7 @@ export const adminAddImages = async (
       .status(201)
       .json({ success: true, message: "Images added", data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -420,12 +411,13 @@ export const adminAddImages = async (
 export const adminDeleteImage = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteProductImage(req.admin!.id, req.params.imageId);
     res.status(200).json({ success: true, message: "Image deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -435,6 +427,7 @@ export const adminDeleteImage = async (
 export const adminUpdateSpecification = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = specificationSchema.parse(req.body);
@@ -451,7 +444,7 @@ export const adminUpdateSpecification = async (
         data: { specification: spec },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -461,6 +454,7 @@ export const adminUpdateSpecification = async (
 export const adminCreateSizeGuide = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = sizeGuideSchema.parse(req.body);
@@ -477,7 +471,7 @@ export const adminCreateSizeGuide = async (
         data: { sizeGuide: guide },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -485,12 +479,13 @@ export const adminCreateSizeGuide = async (
 export const adminDeleteSizeGuide = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteSizeGuide(req.admin!.id, req.params.sizeGuideId);
     res.status(200).json({ success: true, message: "Size guide removed" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -502,6 +497,7 @@ export const adminDeleteSizeGuide = async (
 export const clientListProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listClientProducts({
@@ -522,7 +518,7 @@ export const clientListProducts = async (
     });
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -530,6 +526,7 @@ export const clientListProducts = async (
 export const clientFeaturedProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const products = await svc.getFeaturedProducts(
@@ -537,7 +534,7 @@ export const clientFeaturedProducts = async (
     );
     res.status(200).json({ success: true, data: { products } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -545,6 +542,7 @@ export const clientFeaturedProducts = async (
 export const clientNewArrivals = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const products = await svc.getNewArrivals(
@@ -552,7 +550,7 @@ export const clientNewArrivals = async (
     );
     res.status(200).json({ success: true, data: { products } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -560,6 +558,7 @@ export const clientNewArrivals = async (
 export const clientSearchProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.searchProducts(
@@ -569,7 +568,7 @@ export const clientSearchProducts = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -577,6 +576,7 @@ export const clientSearchProducts = async (
 export const clientBestSellers = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getBestSellers(
@@ -585,7 +585,7 @@ export const clientBestSellers = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -593,6 +593,7 @@ export const clientBestSellers = async (
 export const clientTrendingProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getTrendingProducts(
@@ -601,7 +602,7 @@ export const clientTrendingProducts = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -609,12 +610,13 @@ export const clientTrendingProducts = async (
 export const clientGetFilterOptions = async (
   _req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getFilterOptions();
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -622,12 +624,13 @@ export const clientGetFilterOptions = async (
 export const clientGetAllCategories = async (
   _req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const categories = await svc.getAllCategories();
     res.status(200).json({ success: true, data: { categories } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -635,6 +638,7 @@ export const clientGetAllCategories = async (
 export const clientGetProductsByCategory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getProductsByCategory(req.params.category, {
@@ -653,7 +657,7 @@ export const clientGetProductsByCategory = async (
 
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -661,6 +665,7 @@ export const clientGetProductsByCategory = async (
 export const clientGetSubCategoryProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getSubCategoryProducts(
@@ -682,7 +687,7 @@ export const clientGetSubCategoryProducts = async (
 
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -690,12 +695,13 @@ export const clientGetSubCategoryProducts = async (
 export const clientGetCollections = async (
   _req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const collections = await svc.getCollections();
     res.status(200).json({ success: true, data: { collections } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -703,6 +709,7 @@ export const clientGetCollections = async (
 export const clientGetProductsByCollection = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getProductsByCollection(req.params.collection, {
@@ -722,7 +729,7 @@ export const clientGetProductsByCollection = async (
 
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -730,12 +737,13 @@ export const clientGetProductsByCollection = async (
 export const clientGetVariants = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const variants = await svc.getProductVariants(req.params.productId);
     res.status(200).json({ success: true, data: { variants } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -743,12 +751,13 @@ export const clientGetVariants = async (
 export const clientGetVariantDetails = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const variant = await svc.getVariantDetails(req.params.variantId);
     res.status(200).json({ success: true, data: { variant } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -756,6 +765,7 @@ export const clientGetVariantDetails = async (
 export const clientRelatedProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getRelatedProducts(
@@ -764,7 +774,7 @@ export const clientRelatedProducts = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -772,6 +782,7 @@ export const clientRelatedProducts = async (
 export const clientSimilarProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getSimilarProducts(
@@ -780,7 +791,7 @@ export const clientSimilarProducts = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -788,6 +799,7 @@ export const clientSimilarProducts = async (
 export const clientPersonalizedProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getPersonalizedProducts(
@@ -796,7 +808,7 @@ export const clientPersonalizedProducts = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -804,11 +816,12 @@ export const clientPersonalizedProducts = async (
 export const clientGetProduct = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const product = await svc.getProductBySlug(req.params.slug);
     res.status(200).json({ success: true, data: { product } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

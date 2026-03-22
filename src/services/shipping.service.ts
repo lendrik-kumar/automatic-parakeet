@@ -2,16 +2,9 @@ import { shippingRepository } from "../repositories/shipping.repository.js";
 import { orderRepository } from "../repositories/order.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import type { ShippingStatus } from "../generated/prisma/enums.js";
+import { AppError } from "../utils/AppError.js";
 
-export class ShippingError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ShippingError";
-  }
-}
+export class ShippingError extends AppError {}
 
 // ── Shipping Methods ──────────────────────────────────────────────────────────
 

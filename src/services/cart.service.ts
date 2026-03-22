@@ -13,16 +13,9 @@ import { shippingRuleRepository } from "../repositories/shipping-rule.repository
 import { taxRuleRepository } from "../repositories/tax-rule.repository.js";
 import { wishlistRepository } from "../repositories/wishlist.repository.js";
 import { validateCoupon } from "./coupon.service.js";
+import { AppError } from "../utils/AppError.js";
 
-export class CartError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "CartError";
-  }
-}
+export class CartError extends AppError {}
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 

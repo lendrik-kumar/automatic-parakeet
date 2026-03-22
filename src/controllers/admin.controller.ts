@@ -1,10 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/admin-auth.service.js";
-import {
-  AdminAuthError,
-  extractRequestInfo,
-} from "../services/admin-auth.service.js";
+import { extractRequestInfo } from "../services/admin-auth.service.js";
 
 // ─── Zod Schemas ────────────────────────────────────────────────────────────────
 
@@ -17,35 +14,13 @@ const refreshTokenSchema = z.object({
   refreshToken: z.string(),
 });
 
-// ─── Error Handler Helper ────────────────────────────────────────────────────────────────
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof AdminAuthError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[AdminController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
-
 // ─── Auth Handlers ────────────────────────────────────────────────────────────────
 
 /** POST /admin/auth/login */
 export const adminLogin = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { email, password } = loginSchema.parse(req.body);
@@ -55,7 +30,7 @@ export const adminLogin = async (
       .status(200)
       .json({ success: true, message: "Login successful", data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -63,13 +38,14 @@ export const adminLogin = async (
 export const adminLogout = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { refreshToken } = refreshTokenSchema.parse(req.body);
     await svc.adminLogout(req.admin?.id, refreshToken);
     res.status(200).json({ success: true, message: "Logged out successfully" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -77,6 +53,7 @@ export const adminLogout = async (
 export const adminLogoutAll = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.admin) {
@@ -88,7 +65,7 @@ export const adminLogoutAll = async (
       .status(200)
       .json({ success: true, message: "Logged out from all devices" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -96,6 +73,7 @@ export const adminLogoutAll = async (
 export const adminRefreshToken = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { refreshToken } = refreshTokenSchema.parse(req.body);
@@ -108,7 +86,7 @@ export const adminRefreshToken = async (
         data: result,
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -118,6 +96,7 @@ export const adminRefreshToken = async (
 export const getCurrentAdmin = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.admin) {
@@ -135,7 +114,7 @@ export const getCurrentAdmin = async (
     void _ph;
     res.status(200).json({ success: true, data: { admin: adminResponse } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -143,6 +122,7 @@ export const getCurrentAdmin = async (
 export const listAdminSessions = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.admin) {
@@ -152,7 +132,7 @@ export const listAdminSessions = async (
     const sessions = await svc.listAdminSessions(req.admin.id);
     res.status(200).json({ success: true, data: { sessions } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -160,6 +140,7 @@ export const listAdminSessions = async (
 export const getAdminActivityLogs = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.admin) {
@@ -171,7 +152,7 @@ export const getAdminActivityLogs = async (
     const result = await svc.getAdminActivityLogs(req.admin.id, page, limit);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -179,6 +160,7 @@ export const getAdminActivityLogs = async (
 export const revokeAdminSession = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.admin) {
@@ -190,6 +172,6 @@ export const revokeAdminSession = async (
       .status(200)
       .json({ success: true, message: "Session revoked successfully" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

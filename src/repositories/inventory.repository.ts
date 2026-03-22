@@ -194,4 +194,55 @@ export const inventoryRepository = {
         });
       }),
     ),
+
+  findVariantWithInventory: (variantId: string) =>
+    prisma.productVariant.findUnique({
+      where: { id: variantId },
+      include: {
+        inventory: true,
+        product: { select: { id: true, name: true, slug: true } },
+      },
+    }),
+
+  upsertInventoryForVariant: (
+    variantId: string,
+    data: { stockQuantity: number; reorderThreshold: number },
+  ) =>
+    prisma.inventory.upsert({
+      where: { variantId },
+      create: {
+        variantId,
+        stockQuantity: data.stockQuantity,
+        reservedStock: 0,
+        availableStock: data.stockQuantity,
+        reorderThreshold: data.reorderThreshold,
+      },
+      update: {
+        stockQuantity: data.stockQuantity,
+        reorderThreshold: data.reorderThreshold,
+        availableStock: data.stockQuantity,
+      },
+    }),
+
+  getInventoryForecast: async () => {
+    const [totalSkus, outOfStockSkus, allRows] = await Promise.all([
+      prisma.inventory.count(),
+      prisma.inventory.count({ where: { availableStock: { lte: 0 } } }),
+      prisma.inventory.findMany({
+        select: { availableStock: true, reorderThreshold: true },
+      }),
+    ]);
+
+    const lowStockSkus = allRows.filter(
+      (row) => row.availableStock <= row.reorderThreshold,
+    ).length;
+
+    return {
+      totalSkus,
+      lowStockSkus,
+      outOfStockSkus,
+      healthScore:
+        totalSkus === 0 ? 100 : Math.max(0, 100 - Math.round((lowStockSkus / totalSkus) * 100)),
+    };
+  },
 };

@@ -10,13 +10,8 @@ import { cartRepository } from "../repositories/cart.repository.js";
 import { inventoryRepository } from "../repositories/inventory.repository.js";
 import { couponRepository } from "../repositories/coupon.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
-export class OrderError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "OrderError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class OrderError extends AppError {
 }
 const generateOrderNumber = () => {
     const prefix = "ORD";
@@ -622,6 +617,24 @@ export const getUserOrder = async (userId, orderId) => {
         throw new OrderError(403, "Not your order");
     return order;
 };
+export const getUserOrderStats = async (userId) => {
+    const [orders] = await orderRepository.findByCustomer(userId, 0, 1000);
+    const totalOrders = orders.length;
+    const totalSpent = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+    const deliveredOrders = orders.filter((o) => o.orderStatus === "DELIVERED").length;
+    const cancelledOrders = orders.filter((o) => o.orderStatus === "CANCELLED").length;
+    return {
+        totalOrders,
+        deliveredOrders,
+        cancelledOrders,
+        totalSpent,
+        averageOrderValue: totalOrders ? totalSpent / totalOrders : 0,
+    };
+};
+export const getUpcomingOrders = async (userId) => {
+    const [orders] = await orderRepository.findByCustomer(userId, 0, 100);
+    return orders.filter((order) => ["CONFIRMED", "PROCESSING", "SHIPPED"].includes(order.orderStatus));
+};
 export const cancelOrder = async (userId, orderId) => {
     const order = await orderRepository.findById(orderId);
     if (!order)
@@ -637,6 +650,37 @@ export const cancelOrder = async (userId, orderId) => {
         await inventoryRepository.restockItem(item.variantId, item.quantity);
     }
     await orderRepository.updateStatus(orderId, "CANCELLED");
+    return orderRepository.findById(orderId);
+};
+export const updateOrderAddress = async (userId, orderId, addressId) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order)
+        throw new OrderError(404, "Order not found");
+    if (order.customerId !== userId)
+        throw new OrderError(403, "Not your order");
+    if (!["PENDING", "CONFIRMED", "PROCESSING"].includes(order.orderStatus)) {
+        throw new OrderError(400, "Order address cannot be changed at this stage");
+    }
+    const address = await prisma.address.findUnique({ where: { id: addressId } });
+    if (!address || address.userId !== userId) {
+        throw new OrderError(400, "Invalid address");
+    }
+    const addressSnapshot = JSON.stringify({
+        fullName: address.fullName,
+        phone: address.phone,
+        addressLine1: address.addressLine1,
+        addressLine2: address.addressLine2,
+        city: address.city,
+        state: address.state,
+        postalCode: address.postalCode,
+        landmark: address.landmark,
+    });
+    await prisma.orderAddress.update({
+        where: { orderId },
+        data: {
+            shippingAddress: addressSnapshot,
+        },
+    });
     return orderRepository.findById(orderId);
 };
 // ─── Admin Order Endpoints ────────────────────────────────────────────────────
@@ -764,4 +808,53 @@ export const getOrderTimeline = async (orderId) => {
         })),
     ].sort((a, b) => a.at.getTime() - b.at.getTime());
     return { orderId: order.id, orderNumber: order.orderNumber, timeline };
+};
+export const getFulfillmentQueue = async (page = 1, limit = 20) => {
+    const skip = (page - 1) * limit;
+    const [orders, total] = await orderRepository.findManyAdvanced({
+        skip,
+        take: limit,
+        fulfillmentStatus: "PROCESSING",
+    });
+    return {
+        orders,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+};
+export const getDelayedOrders = async (delayedDays = 5) => {
+    const threshold = new Date(Date.now() - delayedDays * 24 * 60 * 60 * 1000);
+    const [orders] = await orderRepository.findManyAdvanced({
+        skip: 0,
+        take: 200,
+        fulfillmentStatus: "SHIPPED",
+        endDate: threshold,
+    });
+    return orders;
+};
+export const bulkAssignCourier = async (adminId, orderIds, courierName) => {
+    if (!orderIds.length)
+        throw new OrderError(400, "Order IDs are required");
+    const result = await prisma.shipment.updateMany({
+        where: { orderId: { in: orderIds } },
+        data: { courierName },
+    });
+    await adminRepository.logActivity(adminId, "UPDATE", "Order", "bulk-assign-courier");
+    return { updatedCount: result.count };
+};
+export const exportOrders = async (page = 1, limit = 100) => {
+    const skip = (page - 1) * limit;
+    const [orders] = await orderRepository.findManyAdvanced({
+        skip,
+        take: limit,
+    });
+    return orders.map((order) => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerEmail: order.customer.email,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
+        totalAmount: order.totalAmount,
+        placedAt: order.placedAt,
+    }));
 };

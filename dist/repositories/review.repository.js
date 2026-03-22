@@ -99,4 +99,34 @@ export const reviewRepository = {
         by: ["status"],
         _count: true,
     }),
+    findByCustomerId: (customerId, skip, take) => Promise.all([
+        prisma.productReview.findMany({
+            where: { customerId },
+            skip,
+            take,
+            orderBy: { createdAt: "desc" },
+            include: {
+                product: { select: { id: true, name: true, slug: true } },
+            },
+        }),
+        prisma.productReview.count({ where: { customerId } }),
+    ]),
+    updateByOwner: (id, customerId, data) => prisma.productReview.updateMany({
+        where: { id, customerId },
+        data: {
+            ...data,
+            status: "PENDING",
+            moderatedBy: null,
+            moderatedAt: null,
+        },
+    }),
+    deleteByOwner: (id, customerId) => prisma.productReview.deleteMany({
+        where: { id, customerId },
+    }),
+    countRatingDistribution: (productId) => prisma.productReview.groupBy({
+        by: ["rating"],
+        where: { productId, status: "APPROVED" },
+        _count: true,
+        orderBy: { rating: "desc" },
+    }),
 };

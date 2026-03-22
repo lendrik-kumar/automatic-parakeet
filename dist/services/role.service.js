@@ -1,12 +1,7 @@
 import { roleRepository, } from "../repositories/role.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
-export class RoleError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "RoleError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class RoleError extends AppError {
 }
 export const listRoles = async () => {
     return roleRepository.findAll();

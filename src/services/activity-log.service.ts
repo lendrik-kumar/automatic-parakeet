@@ -1,15 +1,8 @@
 import prisma from "../lib/prisma.js";
 import type { AdminActionType } from "../generated/prisma/enums.js";
+import { AppError } from "../utils/AppError.js";
 
-export class ActivityLogError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ActivityLogError";
-  }
-}
+export class ActivityLogError extends AppError {}
 
 export const listActivityLogs = async (query: {
   page?: number;

@@ -2,13 +2,8 @@ import { returnRepository } from "../repositories/return.repository.js";
 import { orderRepository } from "../repositories/order.repository.js";
 import { inventoryRepository } from "../repositories/inventory.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
-export class ReturnError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "ReturnError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class ReturnError extends AppError {
 }
 /** POST /orders/:orderId/returns */
 export const createReturn = async (userId, orderId, data) => {
@@ -49,6 +44,47 @@ export const listUserReturns = async (userId, page = 1, limit = 10) => {
     return {
         returns,
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+};
+export const getUserReturnById = async (userId, returnId) => {
+    const returnReq = await returnRepository.findById(returnId);
+    if (!returnReq)
+        throw new ReturnError(404, "Return request not found");
+    if (returnReq.customerId !== userId) {
+        throw new ReturnError(403, "Not your return request");
+    }
+    return returnReq;
+};
+export const cancelUserReturn = async (userId, returnId) => {
+    const returnReq = await returnRepository.findById(returnId);
+    if (!returnReq)
+        throw new ReturnError(404, "Return request not found");
+    if (returnReq.customerId !== userId) {
+        throw new ReturnError(403, "Not your return request");
+    }
+    if (returnReq.returnStatus !== "PENDING") {
+        throw new ReturnError(400, "Only pending return requests can be cancelled");
+    }
+    return returnRepository.updateStatus(returnId, "REJECTED");
+};
+export const getReturnTimeline = async (userId, returnId) => {
+    const returnReq = await getUserReturnById(userId, returnId);
+    const timeline = [
+        {
+            key: "REQUESTED",
+            at: returnReq.requestedAt,
+            status: "Return requested",
+        },
+        {
+            key: "CURRENT_STATUS",
+            at: returnReq.updatedAt,
+            status: `Current status: ${returnReq.returnStatus}`,
+        },
+    ];
+    return {
+        returnId: returnReq.id,
+        currentStatus: returnReq.returnStatus,
+        timeline,
     };
 };
 /** GET /admin/returns */
@@ -96,3 +132,50 @@ export const bulkApproveReturns = async (adminId, returnIds) => {
     await adminRepository.logActivity(adminId, "UPDATE", "ReturnRequest", "bulk-approve");
     return result;
 };
+export const getReturnAnalytics = async () => {
+    const grouped = await returnRepository.aggregateByStatus();
+    const total = grouped.reduce((sum, row) => sum + row._count._all, 0);
+    const byStatus = grouped.map((row) => ({
+        status: row.returnStatus,
+        count: row._count._all,
+    }));
+    return {
+        total,
+        byStatus,
+    };
+};
+export const bulkProcessReturns = async (adminId, returnIds, status) => {
+    if (!returnIds.length) {
+        throw new ReturnError(400, "Return IDs are required");
+    }
+    const result = await returnRepository.bulkUpdateStatus(returnIds, status);
+    await adminRepository.logActivity(adminId, "UPDATE", "ReturnRequest", "bulk-process");
+    return result;
+};
+export const exportReturns = async (filters) => {
+    const rows = await returnRepository.findForExport({
+        status: filters?.status,
+        startDate: filters?.startDate ? new Date(filters.startDate) : undefined,
+        endDate: filters?.endDate ? new Date(filters.endDate) : undefined,
+    });
+    return rows.map((row) => ({
+        id: row.id,
+        orderNumber: row.order.orderNumber,
+        customerEmail: row.customer.email,
+        reason: row.reason,
+        status: row.returnStatus,
+        itemCount: row.items.length,
+        requestedAt: row.requestedAt,
+        updatedAt: row.updatedAt,
+    }));
+};
+export const listReturnReasons = async () => ({
+    reasons: [
+        "Product is defective",
+        "Wrong size/fit",
+        "Color differs from pictures",
+        "Changed my mind",
+        "Arrived too late",
+        "Quality not as expected",
+    ],
+});

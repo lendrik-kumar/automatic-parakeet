@@ -1,8 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 
 import * as svc from "../services/address.service.js";
-import { AddressError } from "../services/address.service.js";
 
 // ─── Validation Schemas ─────────────────────────────────────────────────────
 
@@ -40,33 +39,7 @@ const addressIdSchema = z.object({
   addressId: z.string().uuid("Invalid address ID format"),
 });
 
-// ─── Error Handler ──────────────────────────────────────────────────────────
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res.status(400).json({
-      success: false,
-      message: "Validation error",
-      errors: error.issues,
-    });
-    return;
-  }
-
-  if (error instanceof AddressError) {
-    res.status(error.statusCode).json({
-      success: false,
-      message: error.message,
-    });
-    return;
-  }
-
-  console.error("[AddressController]", error);
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-  });
-};
-
+// ─── Handlers ───────────────────────────────────────────────────────────────
 // ─── Controller Handlers ────────────────────────────────────────────────────
 
 /**
@@ -76,6 +49,7 @@ const handleError = (res: Response, error: unknown): void => {
 export const listAddresses = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -86,7 +60,7 @@ export const listAddresses = async (
       data: { addresses },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -97,6 +71,7 @@ export const listAddresses = async (
 export const getAddress = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -109,7 +84,7 @@ export const getAddress = async (
       data: { address },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -120,6 +95,7 @@ export const getAddress = async (
 export const createAddress = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -133,7 +109,7 @@ export const createAddress = async (
       data: { address },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -144,6 +120,7 @@ export const createAddress = async (
 export const updateAddress = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -158,7 +135,7 @@ export const updateAddress = async (
       data: { address },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -169,6 +146,7 @@ export const updateAddress = async (
 export const deleteAddress = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -181,7 +159,7 @@ export const deleteAddress = async (
       message: result.message,
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -192,6 +170,7 @@ export const deleteAddress = async (
 export const setDefaultShipping = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -205,7 +184,7 @@ export const setDefaultShipping = async (
       data: { address },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -216,6 +195,7 @@ export const setDefaultShipping = async (
 export const setDefaultBilling = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -229,6 +209,6 @@ export const setDefaultBilling = async (
       data: { address },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

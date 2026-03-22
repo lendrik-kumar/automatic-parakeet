@@ -1,28 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/category.service.js";
-import { CategoryError } from "../services/category.service.js";
 
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof CategoryError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[CategoryController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -57,6 +36,7 @@ const reorderSchema = z.object({
 export const listCategories = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listCategories(
@@ -68,7 +48,7 @@ export const listCategories = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -76,12 +56,13 @@ export const listCategories = async (
 export const getCategoryTree = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const categories = await svc.getCategoryTree();
     res.status(200).json({ success: true, data: { categories } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -89,6 +70,7 @@ export const getCategoryTree = async (
 export const createCategory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createCategorySchema.parse(req.body);
@@ -99,7 +81,7 @@ export const createCategory = async (
       data: { category },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -107,12 +89,13 @@ export const createCategory = async (
 export const getCategory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const category = await svc.getCategory(req.params.categoryId);
     res.status(200).json({ success: true, data: { category } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -120,6 +103,7 @@ export const getCategory = async (
 export const updateCategory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateCategorySchema.parse(req.body);
@@ -134,7 +118,7 @@ export const updateCategory = async (
       data: { category },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -142,12 +126,13 @@ export const updateCategory = async (
 export const deleteCategory = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteCategory(req.admin!.id, req.params.categoryId);
     res.status(200).json({ success: true, message: "Category deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -155,6 +140,7 @@ export const deleteCategory = async (
 export const updateCategoryStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -169,7 +155,7 @@ export const updateCategoryStatus = async (
       data: { category },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -177,6 +163,7 @@ export const updateCategoryStatus = async (
 export const reorderCategories = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { order } = reorderSchema.parse(req.body);
@@ -186,7 +173,7 @@ export const reorderCategories = async (
       message: "Categories reordered",
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -194,12 +181,13 @@ export const reorderCategories = async (
 export const getCategorySubcategories = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const category = await svc.getCategorySubcategories(req.params.categoryId);
     res.status(200).json({ success: true, data: { category } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -207,6 +195,7 @@ export const getCategorySubcategories = async (
 export const getCategoryProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getCategoryProducts(
@@ -216,7 +205,7 @@ export const getCategoryProducts = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -224,11 +213,12 @@ export const getCategoryProducts = async (
 export const getCategoryStats = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getCategoryStats(req.params.categoryId);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

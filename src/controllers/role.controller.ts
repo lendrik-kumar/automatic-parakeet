@@ -1,28 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/role.service.js";
-import { RoleError } from "../services/role.service.js";
 
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof RoleError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[RoleController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -39,12 +18,13 @@ const updateRoleSchema = createRoleSchema.partial();
 export const listRoles = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const roles = await svc.listRoles();
     res.status(200).json({ success: true, data: { roles } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -52,6 +32,7 @@ export const listRoles = async (
 export const createRole = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createRoleSchema.parse(req.body);
@@ -62,17 +43,17 @@ export const createRole = async (
       data: { role },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** GET /admin/roles/:roleId */
-export const getRole = async (req: Request, res: Response): Promise<void> => {
+export const getRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const role = await svc.getRole(req.params.roleId);
     res.status(200).json({ success: true, data: { role } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -80,6 +61,7 @@ export const getRole = async (req: Request, res: Response): Promise<void> => {
 export const updateRole = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateRoleSchema.parse(req.body);
@@ -90,7 +72,7 @@ export const updateRole = async (
       data: { role },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -98,12 +80,13 @@ export const updateRole = async (
 export const deleteRole = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteRole(req.admin!.id, req.params.roleId);
     res.status(200).json({ success: true, message: "Role deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -111,11 +94,12 @@ export const deleteRole = async (
 export const getRoleAdmins = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getRoleAdmins(req.params.roleId);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

@@ -19,6 +19,7 @@ import { sendOTPViaSMS, sendLoginAlertSMS, generateOTP } from "../lib/sms.js";
 import { sendOTPEmail, sendWelcomeEmail, sendLoginNotification, sendPasswordResetEmail, sendPasswordChangedNotification, } from "../lib/email.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { userSessionRepository } from "../repositories/user-session.repository.js";
+import { AppError } from "../utils/AppError.js";
 // ─── Token Helpers ────────────────────────────────────────────────────────────
 /** Sign a short-lived JWT access token for a user (15 min). */
 const signAccessToken = (userId, email) => jwt.sign({ id: userId, email, type: "user" }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
@@ -31,18 +32,13 @@ export const extractRequestInfo = (req) => ({
         "Unknown IP",
 });
 // ─── Custom Error Class ───────────────────────────────────────────────────────
-export class AuthError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "AuthError";
-    }
+export class AuthError extends AppError {
 }
 // ─── Registration Flow ────────────────────────────────────────────────────────
 /**
  * Step 1 — Validate phone, generate & send OTP via SMS, create session.
  * POST /auth/register/initiate-phone
+ * SIMPLIFIED: Only requires phone number (no firstName, lastName, gender)
  */
 export const initiatePhoneRegistration = async (data) => {
     const existing = await userRepository.findByPhone(data.phoneNumber);
@@ -56,13 +52,13 @@ export const initiatePhoneRegistration = async (data) => {
     const result = await sendOTPViaSMS(data.phoneNumber, "registration");
     if (!result.success)
         throw new AuthError(500, "Failed to send OTP");
-    // Create registration session with user data
+    // Create registration session with ONLY phone number
     const sessionId = crypto.randomBytes(32).toString("hex");
     const sessionData = {
         phoneNumber: data.phoneNumber,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        gender: data.gender,
+        firstName: "",
+        lastName: "",
+        gender: "",
         phoneVerified: false,
         emailVerified: false,
         createdAt: new Date().toISOString(),
@@ -186,6 +182,7 @@ export const resendEmailOTP = async (sessionId, email, firstName) => {
 /**
  * Step 5 — Hash password, create User, create UserSession, issue tokens.
  * POST /auth/register/complete
+ * NOW ACCEPTS: firstName, lastName, gender in the request body (not from session)
  */
 export const completeRegistration = async (sessionId, data, requestInfo) => {
     // Validate the temporary Redis session
@@ -195,9 +192,10 @@ export const completeRegistration = async (sessionId, data, requestInfo) => {
     }
     const phoneNumber = session.phoneNumber;
     const email = session.email;
-    const firstName = session.firstName;
-    const lastName = session.lastName;
-    const gender = session.gender;
+    // Get firstName, lastName, gender from request data (not session)
+    const firstName = data.firstName;
+    const lastName = data.lastName;
+    const gender = data.gender;
     // Validate email from session matches provided email
     if (email !== data.email) {
         throw new AuthError(400, "Email does not match verified email");

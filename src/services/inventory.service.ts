@@ -4,16 +4,9 @@
 
 import { inventoryRepository } from "../repositories/inventory.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
+import { AppError } from "../utils/AppError.js";
 
-export class InventoryError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "InventoryError";
-  }
-}
+export class InventoryError extends AppError {}
 
 export const listInventory = async (page = 1, limit = 20) => {
   const skip = (page - 1) * limit;
@@ -109,3 +102,58 @@ export const getInventoryAlerts = async (limit = 50) => {
     outOfStock,
   };
 };
+
+export const bulkImportInventory = async (
+  adminId: string,
+  rows: {
+    variantId: string;
+    stockQuantity: number;
+    reorderThreshold: number;
+  }[],
+) => {
+  if (!rows.length) throw new InventoryError(400, "Inventory rows are required");
+
+  const imported = [];
+  for (const row of rows) {
+    const variant = await inventoryRepository.findVariantWithInventory(row.variantId);
+    if (!variant) {
+      throw new InventoryError(404, `Variant not found: ${row.variantId}`);
+    }
+
+    const item = await inventoryRepository.upsertInventoryForVariant(row.variantId, {
+      stockQuantity: row.stockQuantity,
+      reorderThreshold: row.reorderThreshold,
+    });
+    imported.push(item);
+  }
+
+  await adminRepository.logActivity(adminId, "UPDATE", "Inventory", "bulk-import");
+
+  return { importedCount: imported.length };
+};
+
+export const getInventoryHistory = async (variantId: string) => {
+  const inventory = await inventoryRepository.findByVariantId(variantId);
+  if (!inventory) throw new InventoryError(404, "Inventory record not found");
+
+  return {
+    variantId,
+    current: {
+      stockQuantity: inventory.stockQuantity,
+      reservedStock: inventory.reservedStock,
+      availableStock: inventory.availableStock,
+      reorderThreshold: inventory.reorderThreshold,
+      lastUpdated: inventory.lastUpdated,
+    },
+    timeline: [
+      {
+        event: "SNAPSHOT",
+        at: inventory.lastUpdated,
+        stockQuantity: inventory.stockQuantity,
+        availableStock: inventory.availableStock,
+      },
+    ],
+  };
+};
+
+export const getInventoryForecast = async () => inventoryRepository.getInventoryForecast();

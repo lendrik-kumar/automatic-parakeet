@@ -1,6 +1,6 @@
 import router from "express";
 import { clientBestSellers, clientFeaturedProducts, clientGetCollections, clientGetFilterOptions, clientGetProduct, clientGetProductsByCategory, clientGetProductsByCollection, clientGetSubCategoryProducts, clientGetVariantDetails, clientGetVariants, clientGetAllCategories, clientListProducts, clientNewArrivals, clientPersonalizedProducts, clientRelatedProducts, clientSearchProducts, clientSimilarProducts, clientTrendingProducts, } from "../controllers/product.controller.js";
-import { createReview, getReviews } from "../controllers/review.controller.js";
+import { createReview, getReviews, markReviewHelpful, getReviewSummary, } from "../controllers/review.controller.js";
 import { authenticateUser } from "../middlewares/auth.middleware.js";
 import { generalLimiter } from "../middlewares/rateLimiter.middleware.js";
 const productRouter = router.Router();
@@ -30,7 +30,9 @@ productRouter.get("/:productId/variants", generalLimiter, clientGetVariants);
 productRouter.get("/:productId/related", generalLimiter, clientRelatedProducts);
 productRouter.get("/:productId/similar", generalLimiter, clientSimilarProducts);
 productRouter.get("/:productId/reviews", generalLimiter, getReviews);
+productRouter.get("/:productId/reviews/summary", generalLimiter, getReviewSummary);
 productRouter.post("/:productId/reviews", authenticateUser, createReview);
+productRouter.post("/:productId/reviews/:reviewId/helpful", authenticateUser, generalLimiter, markReviewHelpful);
 // ─── Product Detail (slug) ────────────────────────────────────────────────────
 productRouter.get("/:slug", generalLimiter, clientGetProduct);
 export default productRouter;

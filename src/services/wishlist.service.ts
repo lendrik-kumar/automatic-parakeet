@@ -1,15 +1,8 @@
 import { wishlistRepository } from "../repositories/wishlist.repository.js";
 import * as cartService from "./cart.service.js";
+import { AppError } from "../utils/AppError.js";
 
-export class WishlistError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "WishlistError";
-  }
-}
+export class WishlistError extends AppError {}
 
 export const getWishlist = async (userId: string) => {
   const wishlist = await wishlistRepository.findByCustomerId(userId);

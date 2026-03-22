@@ -115,4 +115,40 @@ export const returnRepository = {
       where: { id: { in: returnIds } },
       data: { returnStatus },
     }),
+
+  aggregateByStatus: () =>
+    prisma.returnRequest.groupBy({
+      by: ["returnStatus"],
+      _count: { _all: true },
+    }),
+
+  findForExport: (filters?: {
+    status?: ReturnStatus;
+    startDate?: Date;
+    endDate?: Date;
+  }) => {
+    const where: Record<string, unknown> = {};
+    if (filters?.status) where.returnStatus = filters.status;
+    if (filters?.startDate || filters?.endDate) {
+      where.requestedAt = {};
+      if (filters.startDate) {
+        (where.requestedAt as Record<string, unknown>).gte = filters.startDate;
+      }
+      if (filters.endDate) {
+        (where.requestedAt as Record<string, unknown>).lte = filters.endDate;
+      }
+    }
+
+    return prisma.returnRequest.findMany({
+      where: where as never,
+      orderBy: { requestedAt: "desc" },
+      include: {
+        customer: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+        order: { select: { id: true, orderNumber: true } },
+        items: true,
+      },
+    });
+  },
 };

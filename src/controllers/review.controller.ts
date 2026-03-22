@@ -1,32 +1,17 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/review.service.js";
-import { ReviewError } from "../services/review.service.js";
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof ReviewError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[ReviewController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const createReviewSchema = z.object({
   rating: z.number().int().min(1).max(5),
   reviewTitle: z.string().min(1).max(255),
+  reviewText: z.string().optional(),
+  images: z.array(z.string().url()).optional(),
+});
+
+const updateMyReviewSchema = z.object({
+  rating: z.number().int().min(1).max(5).optional(),
+  reviewTitle: z.string().min(1).max(255).optional(),
   reviewText: z.string().optional(),
   images: z.array(z.string().url()).optional(),
 });
@@ -49,6 +34,7 @@ const bulkReviewSchema = z.object({
 export const createReview = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createReviewSchema.parse(req.body);
@@ -61,7 +47,7 @@ export const createReview = async (
       .status(201)
       .json({ success: true, message: "Review submitted", data: { review } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -69,6 +55,7 @@ export const createReview = async (
 export const getReviews = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getProductReviews(
@@ -78,7 +65,86 @@ export const getReviews = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** GET /reviews/my-reviews */
+export const myReviews = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const result = await svc.listMyReviews(
+      req.user!.id,
+      Number(req.query.page) || 1,
+      Number(req.query.limit) || 10,
+    );
+    res.status(200).json({ success: true, data: result });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** PUT /reviews/my-reviews/:reviewId */
+export const updateMyReview = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const data = updateMyReviewSchema.parse(req.body);
+    const review = await svc.updateMyReview(req.user!.id, req.params.reviewId, data);
+    res.status(200).json({ success: true, message: "Review updated", data: { review } });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** DELETE /reviews/my-reviews/:reviewId */
+export const deleteMyReview = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    await svc.deleteMyReview(req.user!.id, req.params.reviewId);
+    res.status(200).json({ success: true, message: "Review deleted" });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** POST /products/:productId/reviews/:reviewId/helpful */
+export const markReviewHelpful = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const result = await svc.markReviewHelpful(
+      req.user!.id,
+      req.params.productId,
+      req.params.reviewId,
+    );
+    res.status(200).json({ success: true, data: result });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /products/:productId/reviews/summary */
+export const getReviewSummary = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const summary = await svc.getReviewSummary(req.params.productId);
+    res.status(200).json({ success: true, data: summary });
+  } catch (e) {
+    next(e);
   }
 };
 
@@ -86,12 +152,13 @@ export const getReviews = async (
 export const adminDeleteReview = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteReview(req.admin!.id, req.params.reviewId);
     res.status(200).json({ success: true, message: "Review deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -99,6 +166,7 @@ export const adminDeleteReview = async (
 export const adminListReviews = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const filters = reviewStatusSchema.parse(req.query);
@@ -110,7 +178,7 @@ export const adminListReviews = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -118,6 +186,7 @@ export const adminListReviews = async (
 export const adminApproveReview = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const review = await svc.approveReview(req.admin!.id, req.params.reviewId);
@@ -125,7 +194,7 @@ export const adminApproveReview = async (
       .status(200)
       .json({ success: true, message: "Review approved", data: { review } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -133,6 +202,7 @@ export const adminApproveReview = async (
 export const adminRejectReview = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { note } = moderationNoteSchema.parse(req.body);
@@ -141,7 +211,7 @@ export const adminRejectReview = async (
       .status(200)
       .json({ success: true, message: "Review rejected", data: { review } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -149,6 +219,7 @@ export const adminRejectReview = async (
 export const adminFlagReview = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { note } = moderationNoteSchema.parse(req.body);
@@ -157,7 +228,7 @@ export const adminFlagReview = async (
       .status(200)
       .json({ success: true, message: "Review flagged", data: { review } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -165,6 +236,7 @@ export const adminFlagReview = async (
 export const adminBulkApproveReviews = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { reviewIds } = bulkReviewSchema.parse(req.body);
@@ -175,7 +247,7 @@ export const adminBulkApproveReviews = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -183,6 +255,7 @@ export const adminBulkApproveReviews = async (
 export const adminBulkRejectReviews = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { reviewIds, note } = bulkReviewSchema.parse(req.body);
@@ -193,7 +266,7 @@ export const adminBulkRejectReviews = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -201,6 +274,7 @@ export const adminBulkRejectReviews = async (
 export const adminBulkDeleteReviews = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { reviewIds } = bulkReviewSchema.parse(req.body);
@@ -211,7 +285,7 @@ export const adminBulkDeleteReviews = async (
       data: { deletedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -219,11 +293,12 @@ export const adminBulkDeleteReviews = async (
 export const adminReviewStats = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = await svc.getReviewStats();
     res.status(200).json({ success: true, data });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

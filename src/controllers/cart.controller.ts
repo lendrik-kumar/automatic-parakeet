@@ -1,24 +1,6 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/cart.service.js";
-import { CartError } from "../services/cart.service.js";
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res.status(400).json({
-      success: false,
-      message: "Validation error",
-      errors: error.issues,
-    });
-    return;
-  }
-  if (error instanceof CartError) {
-    res.status(error.statusCode).json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[CartController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const addItemSchema = z.object({
   variantId: z.string().uuid(),
@@ -87,18 +69,18 @@ const syncCartSchema = z.object({
 });
 
 /** GET /cart */
-export const getCart = async (req: Request, res: Response): Promise<void> => {
+export const getCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { region } = summaryQuerySchema.parse(req.query);
     const cart = await svc.getCart(req.user!.id, region);
     res.status(200).json({ success: true, data: { cart } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** POST /cart/items */
-export const addItem = async (req: Request, res: Response): Promise<void> => {
+export const addItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const data = addItemSchema.parse(req.body);
     const cart = await svc.addItem(req.user!.id, data);
@@ -106,45 +88,45 @@ export const addItem = async (req: Request, res: Response): Promise<void> => {
       .status(201)
       .json({ success: true, message: "Item added to cart", data: { cart } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** PATCH /cart/items/:itemId */
-export const updateItem = async (req: Request, res: Response): Promise<void> => {
+export const updateItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { quantity } = updateQuantitySchema.parse(req.body);
     const cart = await svc.updateItemQuantity(req.user!.id, req.params.itemId, quantity);
     res.status(200).json({ success: true, message: "Cart item updated", data: { cart } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** DELETE /cart/items/:itemId */
-export const removeItem = async (req: Request, res: Response): Promise<void> => {
+export const removeItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const cart = await svc.removeItem(req.user!.id, req.params.itemId);
     res
       .status(200)
       .json({ success: true, message: "Item removed from cart", data: { cart } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** DELETE /cart */
-export const clearCart = async (req: Request, res: Response): Promise<void> => {
+export const clearCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     await svc.clearCart(req.user!.id);
     res.status(200).json({ success: true, message: "Cart cleared" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** POST /cart/items/bulk */
-export const bulkAddItems = async (req: Request, res: Response): Promise<void> => {
+export const bulkAddItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { items } = bulkAddItemsSchema.parse(req.body);
     const cart = await svc.bulkAddItems(req.user!.id, items);
@@ -154,12 +136,12 @@ export const bulkAddItems = async (req: Request, res: Response): Promise<void> =
       data: { cart },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** PATCH /cart/items/bulk */
-export const bulkUpdateItems = async (req: Request, res: Response): Promise<void> => {
+export const bulkUpdateItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { updates } = bulkUpdateItemsSchema.parse(req.body);
     const cart = await svc.bulkUpdateItems(req.user!.id, updates);
@@ -169,12 +151,12 @@ export const bulkUpdateItems = async (req: Request, res: Response): Promise<void
       data: { cart },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** DELETE /cart/items/bulk */
-export const bulkRemoveItems = async (req: Request, res: Response): Promise<void> => {
+export const bulkRemoveItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { itemIds } = bulkRemoveItemsSchema.parse(req.body);
     const cart = await svc.bulkRemoveItems(req.user!.id, itemIds);
@@ -184,12 +166,12 @@ export const bulkRemoveItems = async (req: Request, res: Response): Promise<void
       data: { cart },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** POST /cart/coupon */
-export const applyCoupon = async (req: Request, res: Response): Promise<void> => {
+export const applyCoupon = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { couponCode } = applyCouponSchema.parse(req.body);
     const cart = await svc.applyCoupon(req.user!.id, couponCode);
@@ -197,40 +179,40 @@ export const applyCoupon = async (req: Request, res: Response): Promise<void> =>
       .status(200)
       .json({ success: true, message: "Coupon applied", data: { cart } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** DELETE /cart/coupon */
-export const removeCoupon = async (req: Request, res: Response): Promise<void> => {
+export const removeCoupon = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const cart = await svc.removeCoupon(req.user!.id);
     res
       .status(200)
       .json({ success: true, message: "Coupon removed", data: { cart } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** GET /cart/summary */
-export const getCartSummary = async (req: Request, res: Response): Promise<void> => {
+export const getCartSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { region } = summaryQuerySchema.parse(req.query);
     const summary = await svc.getCartSummary(req.user!.id, region);
     res.status(200).json({ success: true, data: { summary } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** POST /cart/validate */
-export const validateCart = async (req: Request, res: Response): Promise<void> => {
+export const validateCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const validation = await svc.validateCart(req.user!.id);
     res.status(200).json({ success: true, data: { validation } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -238,6 +220,7 @@ export const validateCart = async (req: Request, res: Response): Promise<void> =
 export const moveItemToWishlist = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.moveItemToWishlist(req.user!.id, req.params.itemId);
@@ -247,7 +230,7 @@ export const moveItemToWishlist = async (
       data: result,
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -255,6 +238,7 @@ export const moveItemToWishlist = async (
 export const addItemFromWishlist = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const cart = await svc.addItemFromWishlist(req.user!.id, req.params.wishlistItemId);
@@ -264,7 +248,7 @@ export const addItemFromWishlist = async (
       data: { cart },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -272,6 +256,7 @@ export const addItemFromWishlist = async (
 export const saveItemForLater = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.saveItemForLater(req.user!.id, req.params.itemId);
@@ -281,17 +266,17 @@ export const saveItemForLater = async (
       data: result,
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** GET /cart/saved-items */
-export const listSavedItems = async (req: Request, res: Response): Promise<void> => {
+export const listSavedItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const savedItems = await svc.listSavedItems(req.user!.id);
     res.status(200).json({ success: true, data: savedItems });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -299,6 +284,7 @@ export const listSavedItems = async (req: Request, res: Response): Promise<void>
 export const restoreSavedItem = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const cart = await svc.restoreSavedItem(req.user!.id, req.params.savedItemId);
@@ -308,7 +294,7 @@ export const restoreSavedItem = async (
       data: { cart },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -316,22 +302,23 @@ export const restoreSavedItem = async (
 export const removeSavedItem = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.removeSavedItem(req.user!.id, req.params.savedItemId);
     res.status(200).json({ success: true, message: "Saved item removed" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** POST /cart/sync */
-export const syncCart = async (req: Request, res: Response): Promise<void> => {
+export const syncCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const payload = syncCartSchema.parse(req.body);
     const cart = await svc.syncCart(req.user!.id, payload);
     res.status(200).json({ success: true, message: "Cart synced", data: { cart } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

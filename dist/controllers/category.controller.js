@@ -1,26 +1,5 @@
 import { z } from "zod";
 import * as svc from "../services/category.service.js";
-import { CategoryError } from "../services/category.service.js";
-const handleError = (res, error) => {
-    if (error instanceof z.ZodError) {
-        res
-            .status(400)
-            .json({
-            success: false,
-            message: "Validation error",
-            errors: error.issues,
-        });
-        return;
-    }
-    if (error instanceof CategoryError) {
-        res
-            .status(error.statusCode)
-            .json({ success: false, message: error.message });
-        return;
-    }
-    console.error("[CategoryController]", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-};
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 const createCategorySchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -43,27 +22,27 @@ const reorderSchema = z.object({
 });
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 /** GET /admin/categories */
-export const listCategories = async (req, res) => {
+export const listCategories = async (req, res, next) => {
     try {
         const result = await svc.listCategories(Number(req.query.page) || 1, Number(req.query.limit) || 20, req.query.status, req.query.search, req.query.parentId);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/categories/tree */
-export const getCategoryTree = async (req, res) => {
+export const getCategoryTree = async (req, res, next) => {
     try {
         const categories = await svc.getCategoryTree();
         res.status(200).json({ success: true, data: { categories } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /admin/categories */
-export const createCategory = async (req, res) => {
+export const createCategory = async (req, res, next) => {
     try {
         const data = createCategorySchema.parse(req.body);
         const category = await svc.createCategory(req.admin.id, data);
@@ -74,21 +53,21 @@ export const createCategory = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/categories/:categoryId */
-export const getCategory = async (req, res) => {
+export const getCategory = async (req, res, next) => {
     try {
         const category = await svc.getCategory(req.params.categoryId);
         res.status(200).json({ success: true, data: { category } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PUT /admin/categories/:categoryId */
-export const updateCategory = async (req, res) => {
+export const updateCategory = async (req, res, next) => {
     try {
         const data = updateCategorySchema.parse(req.body);
         const category = await svc.updateCategory(req.admin.id, req.params.categoryId, data);
@@ -99,21 +78,21 @@ export const updateCategory = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /admin/categories/:categoryId */
-export const deleteCategory = async (req, res) => {
+export const deleteCategory = async (req, res, next) => {
     try {
         await svc.deleteCategory(req.admin.id, req.params.categoryId);
         res.status(200).json({ success: true, message: "Category deleted" });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PATCH /admin/categories/:categoryId/status */
-export const updateCategoryStatus = async (req, res) => {
+export const updateCategoryStatus = async (req, res, next) => {
     try {
         const { status } = statusSchema.parse(req.body);
         const category = await svc.updateCategoryStatus(req.admin.id, req.params.categoryId, status);
@@ -124,11 +103,11 @@ export const updateCategoryStatus = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /admin/categories/reorder */
-export const reorderCategories = async (req, res) => {
+export const reorderCategories = async (req, res, next) => {
     try {
         const { order } = reorderSchema.parse(req.body);
         await svc.reorderCategories(req.admin.id, order);
@@ -138,36 +117,36 @@ export const reorderCategories = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/categories/:categoryId/subcategories */
-export const getCategorySubcategories = async (req, res) => {
+export const getCategorySubcategories = async (req, res, next) => {
     try {
         const category = await svc.getCategorySubcategories(req.params.categoryId);
         res.status(200).json({ success: true, data: { category } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/categories/:categoryId/products */
-export const getCategoryProducts = async (req, res) => {
+export const getCategoryProducts = async (req, res, next) => {
     try {
         const result = await svc.getCategoryProducts(req.params.categoryId, Number(req.query.page) || 1, Number(req.query.limit) || 20);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /admin/categories/:categoryId/stats */
-export const getCategoryStats = async (req, res) => {
+export const getCategoryStats = async (req, res, next) => {
     try {
         const result = await svc.getCategoryStats(req.params.categoryId);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };

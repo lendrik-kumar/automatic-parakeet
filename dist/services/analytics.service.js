@@ -203,3 +203,76 @@ export const getInventoryAnalytics = async () => {
         outOfStockItems,
     };
 };
+export const getConversionFunnel = async () => {
+    const [users, carts, orders, paidOrders] = await Promise.all([
+        prisma.user.count(),
+        prisma.cart.count({ where: { totalItems: { gt: 0 } } }),
+        prisma.order.count(),
+        prisma.order.count({ where: { paymentStatus: "COMPLETED" } }),
+    ]);
+    return {
+        visitors: users,
+        carts,
+        orders,
+        paidOrders,
+        cartToOrderRate: carts ? (orders / carts) * 100 : 0,
+        orderToPaidRate: orders ? (paidOrders / orders) * 100 : 0,
+    };
+};
+export const getAbandonedCarts = async () => {
+    const carts = await prisma.cart.findMany({
+        where: {
+            totalItems: { gt: 0 },
+            customer: { orders: { none: {} } },
+        },
+        include: {
+            customer: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
+        take: 100,
+        orderBy: { updatedAt: "desc" },
+    });
+    return {
+        count: carts.length,
+        carts,
+    };
+};
+export const getRefundAnalytics = async () => {
+    const grouped = await prisma.refund.groupBy({
+        by: ["refundStatus"],
+        _count: true,
+        _sum: { refundAmount: true },
+    });
+    return {
+        byStatus: grouped.map((row) => ({
+            status: row.refundStatus,
+            count: row._count,
+            amount: row._sum.refundAmount || 0,
+        })),
+    };
+};
+export const getShippingPerformance = async () => {
+    const grouped = await prisma.shipment.groupBy({
+        by: ["shippingStatus"],
+        _count: true,
+    });
+    return {
+        byStatus: grouped.map((row) => ({
+            status: row.shippingStatus,
+            count: row._count,
+        })),
+    };
+};
+export const getCohorts = async () => {
+    const cohorts = await prisma.$queryRaw `
+    SELECT
+      TO_CHAR(DATE_TRUNC('month', u."createdAt"), 'YYYY-MM') AS cohort_month,
+      COUNT(DISTINCT u."id")::int AS users_count,
+      COUNT(o."id")::int AS total_orders
+    FROM "User" u
+    LEFT JOIN "Order" o ON o."customerId" = u."id"
+    GROUP BY DATE_TRUNC('month', u."createdAt")
+    ORDER BY DATE_TRUNC('month', u."createdAt") DESC
+    LIMIT 12
+  `;
+    return { cohorts };
+};

@@ -6,14 +6,9 @@ import { productRepository } from "../repositories/product.repository.js";
 import { inventoryRepository } from "../repositories/inventory.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import { slugify } from "../utils/slugify.js";
+import { AppError } from "../utils/AppError.js";
 // ─── Custom Error ─────────────────────────────────────────────────────────────
-export class ProductError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "ProductError";
-    }
+export class ProductError extends AppError {
 }
 // ─── Admin: Products ──────────────────────────────────────────────────────────
 export const createProduct = async (adminId, data) => {

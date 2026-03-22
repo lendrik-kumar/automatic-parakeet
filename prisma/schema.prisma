@@ -76,6 +76,8 @@ model Admin {
   sessions        AdminSession[]
   activityLogs    AdminActivityLog[]
   moderatedReviews ProductReview[]    @relation("ReviewModeration")
+  cancelledOrders Order[]             @relation("OrderCancelledBy")
+  orderStatusChanges OrderStatusHistory[] @relation("OrderStatusChangedBy")
 
   @@index([email])
   @@index([roleId])
@@ -135,6 +137,10 @@ model Coupon {
   maximumDiscount   Float?
   usageLimit        Int?
   usedCount         Int          @default(0)
+  maxUsesPerUser    Int?
+  isFirstPurchaseOnly Boolean    @default(false)
+  applicableCategories String?   @db.Text
+  excludedProducts  String?      @db.Text
   startDate         DateTime
   expiryDate        DateTime
   status            CouponStatus @default(ACTIVE)
@@ -255,6 +261,7 @@ model CartItem {
   @@index([cartId])
   @@index([productId])
   @@index([variantId])
+  @@index([cartId, createdAt])
 }
 
 // ============================================
@@ -322,6 +329,13 @@ model Order {
   discountAmount    Float           @default(0)
   totalAmount       Float
   currency          String           @default("USD") @db.VarChar(3)
+  notes             String?          @db.Text
+  trackingUrl       String?          @db.Text
+  estimatedDelivery DateTime?
+  deliveredAt       DateTime?
+  cancellationReason String?         @db.Text
+  cancelledAt       DateTime?
+  cancelledBy       String?
   placedAt          DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
@@ -332,11 +346,16 @@ model Order {
   shipments         Shipment[]
   returnRequests    ReturnRequest[]
   refunds           Refund[]
+  statusHistory     OrderStatusHistory[]
+  cancelledByAdmin  Admin?           @relation("OrderCancelledBy", fields: [cancelledBy], references: [id], onDelete: SetNull)
 
   @@index([customerId])
   @@index([orderStatus])
   @@index([paymentStatus])
   @@index([orderNumber])
+  @@index([fulfillmentStatus])
+  @@index([placedAt])
+  @@index([cancelledBy])
 }
 
 model OrderItem {
@@ -518,6 +537,12 @@ model Product {
   brand             String             @db.VarChar(255)
   description       String?            @db.Text
   shortDescription  String?            @db.VarChar(500)
+  metaTitle         String?            @db.VarChar(255)
+  metaDescription   String?            @db.Text
+  metaKeywords      String?            @db.Text
+  sku               String?            @unique @db.VarChar(100)
+  weight            Float?
+  dimensions        String?            @db.Text
   gender            Gender
   shoeType          String             @db.VarChar(100)
   category          String             @db.VarChar(255)
@@ -539,6 +564,7 @@ model Product {
   cartItems         CartItem[]
   savedItems        SavedItem[]
   wishlistItems     WishlistItem[]
+  priceAlerts       PriceAlert[]
   orderItems        OrderItem[]
   collection        Collection?        @relation("ProductCollection", fields: [collectionId], references: [id], onDelete: SetNull)
   categoryRef       Category?          @relation("ProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
@@ -548,6 +574,9 @@ model Product {
   @@index([status])
   @@index([collectionId])
   @@index([categoryId])
+  @@index([brand])
+  @@index([newArrival])
+  @@index([featuredProduct])
 }
 
 model ProductVariant {
@@ -666,6 +695,8 @@ model ProductReview {
   @@index([productId])
   @@index([rating])
   @@index([status])
+  @@index([productId, status])
+  @@index([customerId, createdAt])
 }
 // ============================================
 // ENUMS
@@ -772,6 +803,12 @@ model User {
   phoneNumber     String        @unique @db.VarChar(20)
   gender          Gender
   dateOfBirth     DateTime
+  profileImage    String?       @db.Text
+  loyaltyPoints   Int           @default(0)
+  referralCode    String?       @unique @db.VarChar(50)
+  referredById    String?
+  preferences     String?       @db.Text
+  deletedAt       DateTime?
   status          UserStatus    @default(ACTIVE)
   emailVerified   Boolean       @default(false)
   phoneVerified   Boolean       @default(false)
@@ -787,10 +824,17 @@ model User {
   savedItems      SavedItem[]
   wishlist        Wishlist?
   returnRequests  ReturnRequest[]
+  savedPaymentMethods SavedPaymentMethod[]
+  priceAlerts     PriceAlert[]
+  referredBy      User?         @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals       User[]        @relation("UserReferrals")
 
   @@index([email])
   @@index([phoneNumber])
   @@index([status])
+  @@index([referralCode])
+  @@index([deletedAt])
+  @@index([referredById])
 }
 
 model UserSession {
@@ -821,6 +865,8 @@ model Address {
   landmark          String?  @db.VarChar(255)
   latitude          Float?
   longitude         Float?
+  validated         Boolean  @default(false)
+  validatedAt       DateTime?
   isDefaultShipping Boolean  @default(false)
   isDefaultBilling  Boolean  @default(false)
   createdAt         DateTime @default(now())
@@ -829,6 +875,8 @@ model Address {
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([postalCode])
+  @@index([city, state])
 }
 
 
@@ -858,8 +906,76 @@ model WishlistItem {
   wishlist    Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  priceAlerts PriceAlert[]
 
   @@index([wishlistId])
   @@index([productId])
   @@index([variantId])
+  @@index([wishlistId, addedAt])
+}
+
+model SavedPaymentMethod {
+  id             String          @id @default(uuid())
+  userId         String
+  provider       PaymentProvider
+  paymentMethod  PaymentMethod
+  token          String          @db.VarChar(255)
+  cardBrand      String?         @db.VarChar(50)
+  cardLast4      String?         @db.VarChar(4)
+  cardExpMonth   Int?
+  cardExpYear    Int?
+  upiId          String?         @db.VarChar(255)
+  isDefault      Boolean         @default(false)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([provider])
+  @@index([isDefault])
+}
+
+model PriceAlert {
+  id               String       @id @default(uuid())
+  userId           String
+  productId        String
+  wishlistItemId   String?
+  targetPrice      Float
+  currentPrice     Float
+  isActive         Boolean      @default(true)
+  triggeredAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product          Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  wishlistItem     WishlistItem? @relation(fields: [wishlistItemId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([isActive])
+  @@index([wishlistItemId])
+}
+
+model OrderStatusHistory {
+  id                 String            @id @default(uuid())
+  orderId            String
+  fromOrderStatus    OrderStatus?
+  toOrderStatus      OrderStatus?
+  fromPaymentStatus  PaymentStatus?
+  toPaymentStatus    PaymentStatus?
+  fromFulfillmentStatus FulfillmentStatus?
+  toFulfillmentStatus   FulfillmentStatus?
+  note               String?           @db.Text
+  changedByAdminId   String?
+  changedAt          DateTime          @default(now())
+
+  order              Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedByAdmin     Admin?            @relation("OrderStatusChangedBy", fields: [changedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([changedByAdminId])
+  @@index([changedAt])
 }

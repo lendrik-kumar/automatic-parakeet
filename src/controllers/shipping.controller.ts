@@ -1,28 +1,6 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/shipping.service.js";
-import { ShippingError } from "../services/shipping.service.js";
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof ShippingError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[ShippingController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const createMethodSchema = z.object({
   name: z.string().min(1),
@@ -58,6 +36,7 @@ const shipmentStatusSchema = z.object({
 export const createMethod = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createMethodSchema.parse(req.body);
@@ -70,7 +49,7 @@ export const createMethod = async (
         data: { method },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -78,12 +57,13 @@ export const createMethod = async (
 export const listMethods = async (
   _req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const methods = await svc.listMethods();
     res.status(200).json({ success: true, data: { methods } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -91,6 +71,7 @@ export const listMethods = async (
 export const updateMethod = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateMethodSchema.parse(req.body);
@@ -107,7 +88,7 @@ export const updateMethod = async (
         data: { method },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -115,12 +96,13 @@ export const updateMethod = async (
 export const deleteMethod = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteMethod(req.admin!.id, req.params.methodId);
     res.status(200).json({ success: true, message: "Shipping method deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -130,6 +112,7 @@ export const deleteMethod = async (
 export const createShipment = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createShipmentSchema.parse(req.body);
@@ -146,7 +129,7 @@ export const createShipment = async (
       .status(201)
       .json({ success: true, message: "Shipment created", data: { shipment } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -154,6 +137,7 @@ export const createShipment = async (
 export const updateShipmentStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = shipmentStatusSchema.parse(req.body);
@@ -170,7 +154,7 @@ export const updateShipmentStatus = async (
         data: { shipment },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -178,6 +162,7 @@ export const updateShipmentStatus = async (
 export const listShipments = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listShipments(
@@ -187,7 +172,7 @@ export const listShipments = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -195,11 +180,12 @@ export const listShipments = async (
 export const getShipment = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const shipment = await svc.getShipment(req.params.shipmentId);
     res.status(200).json({ success: true, data: { shipment } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

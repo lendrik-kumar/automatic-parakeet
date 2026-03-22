@@ -1,11 +1,6 @@
 import prisma from "../lib/prisma.js";
-export class ActivityLogError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "ActivityLogError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class ActivityLogError extends AppError {
 }
 export const listActivityLogs = async (query) => {
     const page = query.page || 1;

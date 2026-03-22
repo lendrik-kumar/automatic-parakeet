@@ -1,28 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/collection.service.js";
-import { CollectionError } from "../services/collection.service.js";
 
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof CollectionError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[CollectionController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -56,6 +35,7 @@ const reorderSchema = z.object({
 export const listCollections = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listCollections(
@@ -66,7 +46,7 @@ export const listCollections = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -74,6 +54,7 @@ export const listCollections = async (
 export const createCollection = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createCollectionSchema.parse(req.body);
@@ -84,7 +65,7 @@ export const createCollection = async (
       data: { collection },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -92,12 +73,13 @@ export const createCollection = async (
 export const getCollection = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const collection = await svc.getCollection(req.params.collectionId);
     res.status(200).json({ success: true, data: { collection } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -105,6 +87,7 @@ export const getCollection = async (
 export const updateCollection = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateCollectionSchema.parse(req.body);
@@ -119,7 +102,7 @@ export const updateCollection = async (
       data: { collection },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -127,12 +110,13 @@ export const updateCollection = async (
 export const deleteCollection = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     await svc.deleteCollection(req.admin!.id, req.params.collectionId);
     res.status(200).json({ success: true, message: "Collection deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -140,6 +124,7 @@ export const deleteCollection = async (
 export const updateCollectionStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -154,7 +139,7 @@ export const updateCollectionStatus = async (
       data: { collection },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -162,6 +147,7 @@ export const updateCollectionStatus = async (
 export const reorderCollections = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { order } = reorderSchema.parse(req.body);
@@ -171,7 +157,7 @@ export const reorderCollections = async (
       message: "Collections reordered",
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -179,6 +165,7 @@ export const reorderCollections = async (
 export const getCollectionProducts = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getCollectionProducts(
@@ -188,7 +175,7 @@ export const getCollectionProducts = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -196,11 +183,12 @@ export const getCollectionProducts = async (
 export const getCollectionStats = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getCollectionStats(req.params.collectionId);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

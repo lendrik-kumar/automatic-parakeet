@@ -1,6 +1,5 @@
 import { z } from "zod";
 import * as svc from "../services/address.service.js";
-import { AddressError } from "../services/address.service.js";
 // ─── Validation Schemas ─────────────────────────────────────────────────────
 const createAddressSchema = z.object({
     fullName: z.string().min(2, "Full name must be at least 2 characters"),
@@ -33,35 +32,13 @@ const updateAddressSchema = z.object({
 const addressIdSchema = z.object({
     addressId: z.string().uuid("Invalid address ID format"),
 });
-// ─── Error Handler ──────────────────────────────────────────────────────────
-const handleError = (res, error) => {
-    if (error instanceof z.ZodError) {
-        res.status(400).json({
-            success: false,
-            message: "Validation error",
-            errors: error.issues,
-        });
-        return;
-    }
-    if (error instanceof AddressError) {
-        res.status(error.statusCode).json({
-            success: false,
-            message: error.message,
-        });
-        return;
-    }
-    console.error("[AddressController]", error);
-    res.status(500).json({
-        success: false,
-        message: "Internal server error",
-    });
-};
+// ─── Handlers ───────────────────────────────────────────────────────────────
 // ─── Controller Handlers ────────────────────────────────────────────────────
 /**
  * GET /user/addresses
  * List all addresses for authenticated user
  */
-export const listAddresses = async (req, res) => {
+export const listAddresses = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const addresses = await svc.listUserAddresses(userId);
@@ -71,14 +48,14 @@ export const listAddresses = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /**
  * GET /user/addresses/:addressId
  * Get a single address by ID
  */
-export const getAddress = async (req, res) => {
+export const getAddress = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const { addressId } = addressIdSchema.parse(req.params);
@@ -89,14 +66,14 @@ export const getAddress = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /**
  * POST /user/addresses
  * Create a new address
  */
-export const createAddress = async (req, res) => {
+export const createAddress = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const data = createAddressSchema.parse(req.body);
@@ -108,14 +85,14 @@ export const createAddress = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /**
  * PATCH /user/addresses/:addressId
  * Update an address
  */
-export const updateAddress = async (req, res) => {
+export const updateAddress = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const { addressId } = addressIdSchema.parse(req.params);
@@ -128,14 +105,14 @@ export const updateAddress = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /**
  * DELETE /user/addresses/:addressId
  * Delete an address
  */
-export const deleteAddress = async (req, res) => {
+export const deleteAddress = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const { addressId } = addressIdSchema.parse(req.params);
@@ -146,14 +123,14 @@ export const deleteAddress = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /**
  * PATCH /user/addresses/:addressId/set-default-shipping
  * Set address as default shipping
  */
-export const setDefaultShipping = async (req, res) => {
+export const setDefaultShipping = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const { addressId } = addressIdSchema.parse(req.params);
@@ -165,14 +142,14 @@ export const setDefaultShipping = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /**
  * PATCH /user/addresses/:addressId/set-default-billing
  * Set address as default billing
  */
-export const setDefaultBilling = async (req, res) => {
+export const setDefaultBilling = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const { addressId } = addressIdSchema.parse(req.params);
@@ -184,6 +161,6 @@ export const setDefaultBilling = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };

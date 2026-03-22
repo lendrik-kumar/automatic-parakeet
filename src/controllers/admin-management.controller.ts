@@ -1,28 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/admin-management.service.js";
-import { AdminManagementError } from "../services/admin-management.service.js";
 
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof AdminManagementError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[AdminManagementController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const createAdminSchema = z.object({
   firstName: z.string().min(1),
@@ -49,6 +28,7 @@ const statusSchema = z.object({
 export const listAdmins = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listAdmins(
@@ -57,7 +37,7 @@ export const listAdmins = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -65,6 +45,7 @@ export const listAdmins = async (
 export const createAdmin = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createAdminSchema.parse(req.body);
@@ -73,7 +54,7 @@ export const createAdmin = async (
       .status(201)
       .json({ success: true, message: "Admin created", data: { admin } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -81,6 +62,7 @@ export const createAdmin = async (
 export const updateAdmin = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = updateAdminSchema.parse(req.body);
@@ -93,7 +75,7 @@ export const updateAdmin = async (
       .status(200)
       .json({ success: true, message: "Admin updated", data: { admin } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -101,6 +83,7 @@ export const updateAdmin = async (
 export const updateAdminStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -117,26 +100,26 @@ export const updateAdminStatus = async (
         data: { admin },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** GET /admin/admins/:adminId */
-export const getAdmin = async (req: Request, res: Response): Promise<void> => {
+export const getAdmin = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const admin = await svc.getAdmin(req.params.adminId);
     res.status(200).json({ success: true, data: { admin } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** DELETE /admin/admins/:adminId */
-export const deleteAdmin = async (req: Request, res: Response): Promise<void> => {
+export const deleteAdmin = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     await svc.deleteAdmin(req.admin!.id, req.params.adminId);
     res.status(200).json({ success: true, message: "Admin deleted" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

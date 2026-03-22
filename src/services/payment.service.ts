@@ -8,16 +8,9 @@
 import crypto from "crypto";
 import { paymentRepository } from "../repositories/payment.repository.js";
 import { orderRepository } from "../repositories/order.repository.js";
+import { AppError } from "../utils/AppError.js";
 
-export class PaymentError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "PaymentError";
-  }
-}
+export class PaymentError extends AppError {}
 
 /** POST /payments/create — create a mock payment session */
 export const createPaymentSession = async (paymentId: string) => {

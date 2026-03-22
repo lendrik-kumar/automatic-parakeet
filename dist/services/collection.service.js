@@ -1,13 +1,8 @@
 import { collectionRepository, } from "../repositories/collection.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import { slugify } from "../utils/slugify.js";
-export class CollectionError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "CollectionError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class CollectionError extends AppError {
 }
 export const listCollections = async (page = 1, limit = 20, status, search) => {
     const skip = (page - 1) * limit;

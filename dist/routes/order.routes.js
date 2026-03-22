@@ -1,5 +1,5 @@
 import router from "express";
-import { checkout, listOrders, getOrder, cancelOrder, validateCheckout, createCheckoutOrder, processPayment, getOrderTracking, reorderOrder, getOrderInvoice, } from "../controllers/order.controller.js";
+import { checkout, listOrders, getOrderStats, getUpcomingOrders, getOrder, cancelOrder, updateOrderAddress, validateCheckout, createCheckoutOrder, processPayment, getOrderTracking, reorderOrder, getOrderInvoice, } from "../controllers/order.controller.js";
 import { authenticateUser } from "../middlewares/auth.middleware.js";
 import { generalLimiter } from "../middlewares/rateLimiter.middleware.js";
 const orderRouter = router.Router();
@@ -13,8 +13,11 @@ orderRouter.post("/checkout/create", createCheckoutOrder);
 orderRouter.post("/checkout/:orderId/pay", processPayment);
 // ─── Order Management ─────────────────────────────────────────────────────────
 orderRouter.get("/", listOrders);
+orderRouter.get("/stats", getOrderStats);
+orderRouter.get("/upcoming", getUpcomingOrders);
 orderRouter.get("/:orderId", getOrder);
 orderRouter.patch("/:orderId/cancel", cancelOrder);
+orderRouter.patch("/:orderId/address", updateOrderAddress);
 // ─── Order Actions ────────────────────────────────────────────────────────────
 orderRouter.get("/:orderId/tracking", getOrderTracking);
 orderRouter.post("/:orderId/reorder", reorderOrder);

@@ -3,16 +3,9 @@ import { paymentRepository } from "../repositories/payment.repository.js";
 import { orderRepository } from "../repositories/order.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import type { RefundStatus } from "../generated/prisma/enums.js";
+import { AppError } from "../utils/AppError.js";
 
-export class RefundError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "RefundError";
-  }
-}
+export class RefundError extends AppError {}
 
 /** POST /admin/refunds */
 export const createRefund = async (
@@ -99,4 +92,54 @@ export const bulkProcessRefunds = async (
     "bulk-process",
   );
   return result;
+};
+
+export const getRefundAnalytics = async () => {
+  const grouped = await refundRepository.aggregateByStatus();
+
+  return {
+    byStatus: grouped.map((row) => ({
+      status: row.refundStatus,
+      count: row._count._all,
+      amount: row._sum.refundAmount ?? 0,
+    })),
+    totalCount: grouped.reduce((sum, row) => sum + row._count._all, 0),
+    totalAmount: grouped.reduce((sum, row) => sum + (row._sum.refundAmount ?? 0), 0),
+  };
+};
+
+export const retryRefund = async (adminId: string, refundId: string) => {
+  const refund = await refundRepository.findById(refundId);
+  if (!refund) throw new RefundError(404, "Refund not found");
+  if (refund.refundStatus !== "FAILED") {
+    throw new RefundError(400, "Only failed refunds can be retried");
+  }
+
+  const updated = await refundRepository.updateStatus(refundId, "PROCESSING");
+  await adminRepository.logActivity(adminId, "UPDATE", "Refund", refundId);
+  return updated;
+};
+
+export const exportRefunds = async (filters?: {
+  status?: RefundStatus;
+  startDate?: string;
+  endDate?: string;
+}) => {
+  const rows = await refundRepository.findForExport({
+    status: filters?.status,
+    startDate: filters?.startDate ? new Date(filters.startDate) : undefined,
+    endDate: filters?.endDate ? new Date(filters.endDate) : undefined,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    orderNumber: row.order.orderNumber,
+    customerEmail: row.order.customer.email,
+    transactionId: row.payment.transactionId,
+    amount: row.refundAmount,
+    reason: row.refundReason,
+    status: row.refundStatus,
+    createdAt: row.createdAt,
+    processedAt: row.processedAt,
+  }));
 };

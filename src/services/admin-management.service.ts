@@ -2,16 +2,9 @@ import prisma from "../lib/prisma.js";
 import bcrypt from "bcryptjs";
 import { adminRepository } from "../repositories/admin.repository.js";
 import type { AdminAccountStatus } from "../generated/prisma/enums.js";
+import { AppError } from "../utils/AppError.js";
 
-export class AdminManagementError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "AdminManagementError";
-  }
-}
+export class AdminManagementError extends AppError {}
 
 export const listAdmins = async (page = 1, limit = 20) => {
   const skip = (page - 1) * limit;

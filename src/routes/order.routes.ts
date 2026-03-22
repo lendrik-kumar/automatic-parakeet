@@ -2,8 +2,11 @@ import router from "express";
 import {
   checkout,
   listOrders,
+  getOrderStats,
+  getUpcomingOrders,
   getOrder,
   cancelOrder,
+  updateOrderAddress,
   validateCheckout,
   createCheckoutOrder,
   processPayment,
@@ -29,8 +32,11 @@ orderRouter.post("/checkout/:orderId/pay", processPayment);
 
 // ─── Order Management ─────────────────────────────────────────────────────────
 orderRouter.get("/", listOrders);
+orderRouter.get("/stats", getOrderStats);
+orderRouter.get("/upcoming", getUpcomingOrders);
 orderRouter.get("/:orderId", getOrder);
 orderRouter.patch("/:orderId/cancel", cancelOrder);
+orderRouter.patch("/:orderId/address", updateOrderAddress);
 
 // ─── Order Actions ────────────────────────────────────────────────────────────
 orderRouter.get("/:orderId/tracking", getOrderTracking);

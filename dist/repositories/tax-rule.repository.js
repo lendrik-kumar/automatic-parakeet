@@ -1,5 +1,8 @@
 import prisma from "../lib/prisma.js";
 export const taxRuleRepository = {
+    findById: (id) => prisma.taxRule.findUnique({
+        where: { id },
+    }),
     findActiveByRegion: (region) => prisma.taxRule.findMany({
         where: {
             isActive: true,
@@ -32,6 +35,9 @@ export const taxRuleRepository = {
         }),
         prisma.taxRule.count(),
     ]),
+    createMany: (data) => prisma.taxRule.createMany({
+        data,
+    }),
     create: (data) => prisma.taxRule.create({ data }),
     update: (id, data) => prisma.taxRule.update({ where: { id }, data }),
     delete: (id) => prisma.taxRule.delete({ where: { id } }),

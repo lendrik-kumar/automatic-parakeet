@@ -1,28 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/return.service.js";
-import { ReturnError } from "../services/return.service.js";
 
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof ReturnError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[ReturnController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const createReturnSchema = z.object({
   reason: z.string().min(1),
@@ -44,12 +23,24 @@ const bulkApproveSchema = z.object({
   returnIds: z.array(z.string().uuid()).min(1),
 });
 
+const bulkProcessSchema = z.object({
+  returnIds: z.array(z.string().uuid()).min(1),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED", "RECEIVED", "REFUNDED"]),
+});
+
+const exportQuerySchema = z.object({
+  status: z.enum(["PENDING", "APPROVED", "REJECTED", "RECEIVED", "REFUNDED"]).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
 // ── Client ────────────────────────────────────────────────────────────────────
 
 /** POST /orders/:orderId/returns */
 export const createReturn = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createReturnSchema.parse(req.body);
@@ -66,7 +57,7 @@ export const createReturn = async (
         data: { returnRequest: result },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -74,6 +65,7 @@ export const createReturn = async (
 export const listReturns = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listUserReturns(
@@ -83,7 +75,67 @@ export const listReturns = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** GET /returns/:returnId */
+export const getReturn = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const returnRequest = await svc.getUserReturnById(req.user!.id, req.params.returnId);
+    res.status(200).json({ success: true, data: { returnRequest } });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** PATCH /returns/:returnId/cancel */
+export const cancelReturn = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const returnRequest = await svc.cancelUserReturn(req.user!.id, req.params.returnId);
+    res.status(200).json({
+      success: true,
+      message: "Return request cancelled",
+      data: { returnRequest },
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /returns/:returnId/timeline */
+export const getReturnTimeline = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const timeline = await svc.getReturnTimeline(req.user!.id, req.params.returnId);
+    res.status(200).json({ success: true, data: timeline });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /returns/reasons */
+export const getReturnReasons = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const reasons = await svc.listReturnReasons();
+    res.status(200).json({ success: true, data: reasons });
+  } catch (e) {
+    next(e);
   }
 };
 
@@ -93,6 +145,7 @@ export const listReturns = async (
 export const adminListReturns = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listAdminReturns(
@@ -105,7 +158,7 @@ export const adminListReturns = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -113,6 +166,7 @@ export const adminListReturns = async (
 export const adminUpdateReturn = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -129,7 +183,7 @@ export const adminUpdateReturn = async (
         data: { returnRequest: result },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -137,12 +191,13 @@ export const adminUpdateReturn = async (
 export const adminGetReturn = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const returnRequest = await svc.getAdminReturn(req.params.returnId);
     res.status(200).json({ success: true, data: { returnRequest } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -150,6 +205,7 @@ export const adminGetReturn = async (
 export const adminBulkApproveReturns = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { returnIds } = bulkApproveSchema.parse(req.body);
@@ -160,6 +216,54 @@ export const adminBulkApproveReturns = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** GET /admin/returns/analytics */
+export const adminReturnAnalytics = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const analytics = await svc.getReturnAnalytics();
+    res.status(200).json({ success: true, data: analytics });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** POST /admin/returns/bulk/process */
+export const adminBulkProcessReturns = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { returnIds, status } = bulkProcessSchema.parse(req.body);
+    const result = await svc.bulkProcessReturns(req.admin!.id, returnIds, status);
+    res.status(200).json({
+      success: true,
+      message: "Returns processed",
+      data: { updatedCount: result.count },
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/returns/export */
+export const adminExportReturns = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const filters = exportQuerySchema.parse(req.query);
+    const rows = await svc.exportReturns(filters);
+    res.status(200).json({ success: true, data: { rows, count: rows.length } });
+  } catch (e) {
+    next(e);
   }
 };

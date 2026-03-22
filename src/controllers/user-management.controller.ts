@@ -1,28 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/user-management.service.js";
-import { UserManagementError } from "../services/user-management.service.js";
 
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof UserManagementError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[UserManagementController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const statusSchema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED", "DELETED"]),
@@ -45,7 +24,7 @@ const bulkStatusSchema = z.object({
 });
 
 /** GET /admin/users */
-export const listUsers = async (req: Request, res: Response): Promise<void> => {
+export const listUsers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const result = await svc.listUsers(
       Number(req.query.page) || 1,
@@ -55,17 +34,17 @@ export const listUsers = async (req: Request, res: Response): Promise<void> => {
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** GET /admin/users/:userId */
-export const getUser = async (req: Request, res: Response): Promise<void> => {
+export const getUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const user = await svc.getUser(req.params.userId);
     res.status(200).json({ success: true, data: { user } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -73,6 +52,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
 export const updateUserStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -85,12 +65,12 @@ export const updateUserStatus = async (
       .status(200)
       .json({ success: true, message: "User status updated", data: { user } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** PUT /admin/users/:userId */
-export const updateUser = async (req: Request, res: Response): Promise<void> => {
+export const updateUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const data = updateUserSchema.parse(req.body);
     const user = await svc.updateUserProfile(req.admin!.id, req.params.userId, {
@@ -101,7 +81,7 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       .status(200)
       .json({ success: true, message: "User updated", data: { user } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -109,12 +89,13 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
 export const resetUserPassword = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.resetUserPassword(req.admin!.id, req.params.userId);
     res.status(200).json({ success: true, message: result.message, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -122,6 +103,7 @@ export const resetUserPassword = async (
 export const bulkUpdateUserStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { userIds, status } = bulkStatusSchema.parse(req.body);
@@ -132,7 +114,7 @@ export const bulkUpdateUserStatus = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -140,6 +122,7 @@ export const bulkUpdateUserStatus = async (
 export const getUserOrders = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getUserOrders(
@@ -149,7 +132,7 @@ export const getUserOrders = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -157,6 +140,7 @@ export const getUserOrders = async (
 export const getUserReviews = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getUserReviews(
@@ -166,7 +150,7 @@ export const getUserReviews = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -174,12 +158,13 @@ export const getUserReviews = async (
 export const getUserAddresses = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getUserAddresses(req.params.userId);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -187,6 +172,7 @@ export const getUserAddresses = async (
 export const getUserActivity = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.getUserActivity(
@@ -196,6 +182,62 @@ export const getUserActivity = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** GET /admin/users/export */
+export const exportUsers = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const users = await svc.exportUsers();
+    res.status(200).json({ success: true, data: { users, count: users.length } });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/users/segments */
+export const getUserSegments = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const segments = await svc.getUserSegments();
+    res.status(200).json({ success: true, data: segments });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/users/stats */
+export const getUserStats = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const stats = await svc.getUserStats();
+    res.status(200).json({ success: true, data: stats });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/users/:userId/lifetime-value */
+export const getUserLifetimeValue = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const value = await svc.getUserLifetimeValue(req.params.userId);
+    res.status(200).json({ success: true, data: value });
+  } catch (e) {
+    next(e);
   }
 };

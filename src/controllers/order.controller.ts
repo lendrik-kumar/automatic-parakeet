@@ -1,28 +1,6 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/order.service.js";
-import { OrderError } from "../services/order.service.js";
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof OrderError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[OrderController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const checkoutSchema = z.object({
   cartId: z.string().uuid(),
@@ -86,12 +64,21 @@ const bulkStatusSchema = z.object({
   ]),
 });
 
+const updateOrderAddressSchema = z.object({
+  addressId: z.string().uuid("Invalid address ID"),
+});
+
+const assignCourierSchema = z.object({
+  orderIds: z.array(z.string().uuid()).min(1),
+  courierName: z.string().min(1),
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // CLIENT HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** POST /orders/checkout */
-export const checkout = async (req: Request, res: Response): Promise<void> => {
+export const checkout = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const data = checkoutSchema.parse(req.body);
     const result = await svc.checkout(req.user!.id, data);
@@ -99,7 +86,7 @@ export const checkout = async (req: Request, res: Response): Promise<void> => {
       .status(201)
       .json({ success: true, message: "Order placed", data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -107,6 +94,7 @@ export const checkout = async (req: Request, res: Response): Promise<void> => {
 export const listOrders = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listUserOrders(
@@ -116,17 +104,45 @@ export const listOrders = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** GET /orders/stats */
+export const getOrderStats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const stats = await svc.getUserOrderStats(req.user!.id);
+    res.status(200).json({ success: true, data: stats });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /orders/upcoming */
+export const getUpcomingOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const orders = await svc.getUpcomingOrders(req.user!.id);
+    res.status(200).json({ success: true, data: { orders } });
+  } catch (e) {
+    next(e);
   }
 };
 
 /** GET /orders/:orderId */
-export const getOrder = async (req: Request, res: Response): Promise<void> => {
+export const getOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const order = await svc.getUserOrder(req.user!.id, req.params.orderId);
     res.status(200).json({ success: true, data: { order } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -134,6 +150,7 @@ export const getOrder = async (req: Request, res: Response): Promise<void> => {
 export const cancelOrder = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const order = await svc.cancelOrder(req.user!.id, req.params.orderId);
@@ -141,7 +158,26 @@ export const cancelOrder = async (
       .status(200)
       .json({ success: true, message: "Order cancelled", data: { order } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** PATCH /orders/:orderId/address */
+export const updateOrderAddress = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { addressId } = updateOrderAddressSchema.parse(req.body);
+    const order = await svc.updateOrderAddress(req.user!.id, req.params.orderId, addressId);
+    res.status(200).json({
+      success: true,
+      message: "Order address updated",
+      data: { order },
+    });
+  } catch (e) {
+    next(e);
   }
 };
 
@@ -151,13 +187,14 @@ export const cancelOrder = async (
 export const validateCheckout = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = validateCheckoutSchema.parse(req.body);
     const result = await svc.validateCheckout(req.user!.id, data);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -165,6 +202,7 @@ export const validateCheckout = async (
 export const createCheckoutOrder = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createOrderSchema.parse(req.body);
@@ -175,7 +213,7 @@ export const createCheckoutOrder = async (
       data: { order },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -183,6 +221,7 @@ export const createCheckoutOrder = async (
 export const processPayment = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { orderId } = req.params;
@@ -198,7 +237,7 @@ export const processPayment = async (
       data: paymentSession,
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -208,12 +247,13 @@ export const processPayment = async (
 export const getOrderTracking = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const tracking = await svc.getOrderTracking(req.user!.id, req.params.orderId);
     res.status(200).json({ success: true, data: tracking });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -221,12 +261,13 @@ export const getOrderTracking = async (
 export const reorderOrder = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.reorderFromOrder(req.user!.id, req.params.orderId);
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -234,6 +275,7 @@ export const reorderOrder = async (
 export const getOrderInvoice = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const invoice = await svc.generateOrderInvoice(
@@ -242,7 +284,7 @@ export const getOrderInvoice = async (
     );
     res.status(200).json({ success: true, data: invoice });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -254,6 +296,7 @@ export const getOrderInvoice = async (
 export const adminListOrders = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listAdminOrdersAdvanced({
@@ -270,7 +313,7 @@ export const adminListOrders = async (
     });
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -278,12 +321,13 @@ export const adminListOrders = async (
 export const adminGetOrder = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const order = await svc.getAdminOrder(req.params.orderId);
     res.status(200).json({ success: true, data: { order } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -291,6 +335,7 @@ export const adminGetOrder = async (
 export const adminUpdateOrderStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -307,7 +352,7 @@ export const adminUpdateOrderStatus = async (
         data: { order },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -315,6 +360,7 @@ export const adminUpdateOrderStatus = async (
 export const adminBulkUpdateOrderStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { orderIds, status } = bulkStatusSchema.parse(req.body);
@@ -325,7 +371,7 @@ export const adminBulkUpdateOrderStatus = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -333,6 +379,7 @@ export const adminBulkUpdateOrderStatus = async (
 export const adminSearchOrders = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const query = (req.query.q as string) || "";
@@ -343,7 +390,7 @@ export const adminSearchOrders = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -351,11 +398,79 @@ export const adminSearchOrders = async (
 export const adminGetOrderTimeline = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const timeline = await svc.getOrderTimeline(req.params.orderId);
     res.status(200).json({ success: true, data: timeline });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** GET /admin/orders/fulfillment-queue */
+export const adminFulfillmentQueue = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const result = await svc.getFulfillmentQueue(
+      Number(req.query.page) || 1,
+      Number(req.query.limit) || 20,
+    );
+    res.status(200).json({ success: true, data: result });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/orders/delayed */
+export const adminDelayedOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const orders = await svc.getDelayedOrders(Number(req.query.days) || 5);
+    res.status(200).json({ success: true, data: { orders } });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** POST /admin/orders/bulk/assign-courier */
+export const adminBulkAssignCourier = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { orderIds, courierName } = assignCourierSchema.parse(req.body);
+    const result = await svc.bulkAssignCourier(req.admin!.id, orderIds, courierName);
+    res.status(200).json({
+      success: true,
+      message: "Courier assigned",
+      data: result,
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/orders/export */
+export const adminExportOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const rows = await svc.exportOrders(
+      Number(req.query.page) || 1,
+      Number(req.query.limit) || 100,
+    );
+    res.status(200).json({ success: true, data: { rows, count: rows.length } });
+  } catch (e) {
+    next(e);
   }
 };

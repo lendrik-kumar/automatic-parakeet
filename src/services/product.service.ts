@@ -7,6 +7,7 @@ import { productRepository } from "../repositories/product.repository.js";
 import { inventoryRepository } from "../repositories/inventory.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import { slugify } from "../utils/slugify.js";
+import { AppError } from "../utils/AppError.js";
 import type {
   Gender,
   ProductStatus,
@@ -15,15 +16,7 @@ import type {
 
 // ─── Custom Error ─────────────────────────────────────────────────────────────
 
-export class ProductError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ProductError";
-  }
-}
+export class ProductError extends AppError {}
 
 // ─── Admin: Products ──────────────────────────────────────────────────────────
 

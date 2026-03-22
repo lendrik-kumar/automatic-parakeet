@@ -1,10 +1,11 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import * as svc from "../services/activity-log.service.js";
 
 /** GET /admin/activity-logs */
 export const listActivityLogs = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listActivityLogs({
@@ -16,8 +17,7 @@ export const listActivityLogs = async (
     });
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    console.error("[ActivityLogController]", e);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    next(e);
   }
 };
 
@@ -25,6 +25,7 @@ export const listActivityLogs = async (
 export const exportActivityLogs = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.exportActivityLogs({
@@ -34,7 +35,6 @@ export const exportActivityLogs = async (
     });
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    console.error("[ActivityLogController]", e);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    next(e);
   }
 };

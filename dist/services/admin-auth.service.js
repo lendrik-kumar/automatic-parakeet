@@ -16,14 +16,9 @@ import crypto from "crypto";
 import { JWT_SECRET, ACCESS_TOKEN_EXPIRY } from "../lib/auth.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import { adminSessionRepository } from "../repositories/admin-session.repository.js";
+import { AppError } from "../utils/AppError.js";
 // ─── Custom Error ─────────────────────────────────────────────────────────────
-export class AdminAuthError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "AdminAuthError";
-    }
+export class AdminAuthError extends AppError {
 }
 // ─── Token Helpers ────────────────────────────────────────────────────────────
 /** Sign a 15-minute JWT access token for an admin. */

@@ -1,13 +1,8 @@
 import prisma from "../lib/prisma.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
-export class UserManagementError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "UserManagementError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class UserManagementError extends AppError {
 }
 export const listUsers = async (page = 1, limit = 20, search, status) => {
     const skip = (page - 1) * limit;
@@ -158,4 +153,71 @@ export const bulkUpdateUserStatus = async (adminId, userIds, status) => {
     const result = await userRepository.bulkUpdateStatus(userIds, status);
     await adminRepository.logActivity(adminId, "UPDATE", "User", "bulk-status");
     return result;
+};
+export const exportUsers = async () => {
+    const users = await prisma.user.findMany({
+        orderBy: { createdAt: "desc" },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+            status: true,
+            loyaltyPoints: true,
+            createdAt: true,
+            _count: { select: { orders: true } },
+        },
+    });
+    return users;
+};
+export const getUserSegments = async () => {
+    const [total, active, suspended, deleted] = await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { status: "ACTIVE" } }),
+        prisma.user.count({ where: { status: "SUSPENDED" } }),
+        prisma.user.count({ where: { status: "DELETED" } }),
+    ]);
+    return {
+        total,
+        segments: [
+            { key: "ACTIVE", count: active },
+            { key: "SUSPENDED", count: suspended },
+            { key: "DELETED", count: deleted },
+        ],
+    };
+};
+export const getUserStats = async () => {
+    const [totalUsers, verifiedEmail, verifiedPhone, withOrders] = await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { emailVerified: true } }),
+        prisma.user.count({ where: { phoneVerified: true } }),
+        prisma.user.count({ where: { orders: { some: {} } } }),
+    ]);
+    return {
+        totalUsers,
+        verifiedEmail,
+        verifiedPhone,
+        withOrders,
+    };
+};
+export const getUserLifetimeValue = async (userId) => {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user)
+        throw new UserManagementError(404, "User not found");
+    const aggregate = await prisma.order.aggregate({
+        where: {
+            customerId: userId,
+            paymentStatus: "COMPLETED",
+        },
+        _sum: { totalAmount: true },
+        _count: true,
+        _avg: { totalAmount: true },
+    });
+    return {
+        userId,
+        lifetimeValue: aggregate._sum.totalAmount || 0,
+        totalOrders: aggregate._count,
+        averageOrderValue: aggregate._avg.totalAmount || 0,
+    };
 };

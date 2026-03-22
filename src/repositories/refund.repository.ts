@@ -118,4 +118,48 @@ export const refundRepository = {
         processedAt: refundStatus === "COMPLETED" ? new Date() : undefined,
       },
     }),
+
+  aggregateByStatus: () =>
+    prisma.refund.groupBy({
+      by: ["refundStatus"],
+      _count: { _all: true },
+      _sum: { refundAmount: true },
+    }),
+
+  findForExport: (filters?: {
+    status?: RefundStatus;
+    startDate?: Date;
+    endDate?: Date;
+  }) => {
+    const where: Record<string, unknown> = {};
+    if (filters?.status) where.refundStatus = filters.status;
+    if (filters?.startDate || filters?.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) {
+        (where.createdAt as Record<string, unknown>).gte = filters.startDate;
+      }
+      if (filters.endDate) {
+        (where.createdAt as Record<string, unknown>).lte = filters.endDate;
+      }
+    }
+
+    return prisma.refund.findMany({
+      where: where as never,
+      orderBy: { createdAt: "desc" },
+      include: {
+        payment: {
+          select: { id: true, transactionId: true, paymentMethod: true },
+        },
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            customer: {
+              select: { id: true, firstName: true, lastName: true, email: true },
+            },
+          },
+        },
+      },
+    });
+  },
 };

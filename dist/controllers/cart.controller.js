@@ -1,22 +1,5 @@
 import { z } from "zod";
 import * as svc from "../services/cart.service.js";
-import { CartError } from "../services/cart.service.js";
-const handleError = (res, error) => {
-    if (error instanceof z.ZodError) {
-        res.status(400).json({
-            success: false,
-            message: "Validation error",
-            errors: error.issues,
-        });
-        return;
-    }
-    if (error instanceof CartError) {
-        res.status(error.statusCode).json({ success: false, message: error.message });
-        return;
-    }
-    console.error("[CartController]", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-};
 const addItemSchema = z.object({
     variantId: z.string().uuid(),
     size: z.string().min(1),
@@ -70,18 +53,18 @@ const syncCartSchema = z.object({
         .default("KEEP_HIGHER"),
 });
 /** GET /cart */
-export const getCart = async (req, res) => {
+export const getCart = async (req, res, next) => {
     try {
         const { region } = summaryQuerySchema.parse(req.query);
         const cart = await svc.getCart(req.user.id, region);
         res.status(200).json({ success: true, data: { cart } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/items */
-export const addItem = async (req, res) => {
+export const addItem = async (req, res, next) => {
     try {
         const data = addItemSchema.parse(req.body);
         const cart = await svc.addItem(req.user.id, data);
@@ -90,22 +73,22 @@ export const addItem = async (req, res) => {
             .json({ success: true, message: "Item added to cart", data: { cart } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PATCH /cart/items/:itemId */
-export const updateItem = async (req, res) => {
+export const updateItem = async (req, res, next) => {
     try {
         const { quantity } = updateQuantitySchema.parse(req.body);
         const cart = await svc.updateItemQuantity(req.user.id, req.params.itemId, quantity);
         res.status(200).json({ success: true, message: "Cart item updated", data: { cart } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /cart/items/:itemId */
-export const removeItem = async (req, res) => {
+export const removeItem = async (req, res, next) => {
     try {
         const cart = await svc.removeItem(req.user.id, req.params.itemId);
         res
@@ -113,21 +96,21 @@ export const removeItem = async (req, res) => {
             .json({ success: true, message: "Item removed from cart", data: { cart } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /cart */
-export const clearCart = async (req, res) => {
+export const clearCart = async (req, res, next) => {
     try {
         await svc.clearCart(req.user.id);
         res.status(200).json({ success: true, message: "Cart cleared" });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/items/bulk */
-export const bulkAddItems = async (req, res) => {
+export const bulkAddItems = async (req, res, next) => {
     try {
         const { items } = bulkAddItemsSchema.parse(req.body);
         const cart = await svc.bulkAddItems(req.user.id, items);
@@ -138,11 +121,11 @@ export const bulkAddItems = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** PATCH /cart/items/bulk */
-export const bulkUpdateItems = async (req, res) => {
+export const bulkUpdateItems = async (req, res, next) => {
     try {
         const { updates } = bulkUpdateItemsSchema.parse(req.body);
         const cart = await svc.bulkUpdateItems(req.user.id, updates);
@@ -153,11 +136,11 @@ export const bulkUpdateItems = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /cart/items/bulk */
-export const bulkRemoveItems = async (req, res) => {
+export const bulkRemoveItems = async (req, res, next) => {
     try {
         const { itemIds } = bulkRemoveItemsSchema.parse(req.body);
         const cart = await svc.bulkRemoveItems(req.user.id, itemIds);
@@ -168,11 +151,11 @@ export const bulkRemoveItems = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/coupon */
-export const applyCoupon = async (req, res) => {
+export const applyCoupon = async (req, res, next) => {
     try {
         const { couponCode } = applyCouponSchema.parse(req.body);
         const cart = await svc.applyCoupon(req.user.id, couponCode);
@@ -181,11 +164,11 @@ export const applyCoupon = async (req, res) => {
             .json({ success: true, message: "Coupon applied", data: { cart } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /cart/coupon */
-export const removeCoupon = async (req, res) => {
+export const removeCoupon = async (req, res, next) => {
     try {
         const cart = await svc.removeCoupon(req.user.id);
         res
@@ -193,32 +176,32 @@ export const removeCoupon = async (req, res) => {
             .json({ success: true, message: "Coupon removed", data: { cart } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /cart/summary */
-export const getCartSummary = async (req, res) => {
+export const getCartSummary = async (req, res, next) => {
     try {
         const { region } = summaryQuerySchema.parse(req.query);
         const summary = await svc.getCartSummary(req.user.id, region);
         res.status(200).json({ success: true, data: { summary } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/validate */
-export const validateCart = async (req, res) => {
+export const validateCart = async (req, res, next) => {
     try {
         const validation = await svc.validateCart(req.user.id);
         res.status(200).json({ success: true, data: { validation } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/move-to-wishlist/:itemId */
-export const moveItemToWishlist = async (req, res) => {
+export const moveItemToWishlist = async (req, res, next) => {
     try {
         const result = await svc.moveItemToWishlist(req.user.id, req.params.itemId);
         res.status(200).json({
@@ -228,11 +211,11 @@ export const moveItemToWishlist = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/add-from-wishlist/:wishlistItemId */
-export const addItemFromWishlist = async (req, res) => {
+export const addItemFromWishlist = async (req, res, next) => {
     try {
         const cart = await svc.addItemFromWishlist(req.user.id, req.params.wishlistItemId);
         res.status(200).json({
@@ -242,11 +225,11 @@ export const addItemFromWishlist = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/save-for-later/:itemId */
-export const saveItemForLater = async (req, res) => {
+export const saveItemForLater = async (req, res, next) => {
     try {
         const result = await svc.saveItemForLater(req.user.id, req.params.itemId);
         res.status(200).json({
@@ -256,21 +239,21 @@ export const saveItemForLater = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** GET /cart/saved-items */
-export const listSavedItems = async (req, res) => {
+export const listSavedItems = async (req, res, next) => {
     try {
         const savedItems = await svc.listSavedItems(req.user.id);
         res.status(200).json({ success: true, data: savedItems });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/restore-saved-item/:savedItemId */
-export const restoreSavedItem = async (req, res) => {
+export const restoreSavedItem = async (req, res, next) => {
     try {
         const cart = await svc.restoreSavedItem(req.user.id, req.params.savedItemId);
         res.status(200).json({
@@ -280,27 +263,27 @@ export const restoreSavedItem = async (req, res) => {
         });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** DELETE /cart/saved-items/:savedItemId */
-export const removeSavedItem = async (req, res) => {
+export const removeSavedItem = async (req, res, next) => {
     try {
         await svc.removeSavedItem(req.user.id, req.params.savedItemId);
         res.status(200).json({ success: true, message: "Saved item removed" });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };
 /** POST /cart/sync */
-export const syncCart = async (req, res) => {
+export const syncCart = async (req, res, next) => {
     try {
         const payload = syncCartSchema.parse(req.body);
         const cart = await svc.syncCart(req.user.id, payload);
         res.status(200).json({ success: true, message: "Cart synced", data: { cart } });
     }
     catch (e) {
-        handleError(res, e);
+        next(e);
     }
 };

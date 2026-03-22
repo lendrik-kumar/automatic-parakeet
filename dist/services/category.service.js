@@ -1,13 +1,8 @@
 import { categoryRepository, } from "../repositories/category.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
 import { slugify } from "../utils/slugify.js";
-export class CategoryError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "CategoryError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class CategoryError extends AppError {
 }
 export const listCategories = async (page = 1, limit = 20, status, search, parentId) => {
     const skip = (page - 1) * limit;

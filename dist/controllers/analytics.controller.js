@@ -1,20 +1,15 @@
 import * as analyticsService from "../services/analytics.service.js";
-const handleError = (res, err) => {
-    console.error(err);
-    return res
-        .status(500)
-        .json({ success: false, message: "Internal server error" });
-};
-export const dashboard = async (_req, res) => {
+export const dashboard = async (_req, res, next) => {
     try {
         const data = await analyticsService.getDashboard();
         return res.json({ success: true, data });
     }
     catch (err) {
-        return handleError(res, err);
+        next(err);
+        return;
     }
 };
-export const salesAnalytics = async (req, res) => {
+export const salesAnalytics = async (req, res, next) => {
     try {
         const { startDate, endDate, period } = req.query;
         const data = await analyticsService.getSalesAnalytics({
@@ -25,43 +20,98 @@ export const salesAnalytics = async (req, res) => {
         return res.json({ success: true, data });
     }
     catch (err) {
-        return handleError(res, err);
+        next(err);
+        return;
     }
 };
-export const productAnalytics = async (_req, res) => {
+export const productAnalytics = async (_req, res, next) => {
     try {
         const data = await analyticsService.getProductAnalytics();
         return res.json({ success: true, data });
     }
     catch (err) {
-        return handleError(res, err);
+        next(err);
+        return;
     }
 };
-export const customerAnalytics = async (_req, res) => {
+export const customerAnalytics = async (_req, res, next) => {
     try {
         const data = await analyticsService.getCustomerAnalytics();
         return res.json({ success: true, data });
     }
     catch (err) {
-        return handleError(res, err);
+        next(err);
+        return;
     }
 };
-export const revenueAnalytics = async (req, res) => {
+export const revenueAnalytics = async (req, res, next) => {
     try {
         const { startDate, endDate } = req.query;
         const data = await analyticsService.getRevenueAnalytics({ startDate, endDate });
         return res.json({ success: true, data });
     }
     catch (err) {
-        return handleError(res, err);
+        next(err);
+        return;
     }
 };
-export const inventoryAnalytics = async (_req, res) => {
+export const inventoryAnalytics = async (_req, res, next) => {
     try {
         const data = await analyticsService.getInventoryAnalytics();
         return res.json({ success: true, data });
     }
     catch (err) {
-        return handleError(res, err);
+        next(err);
+        return;
+    }
+};
+export const conversionFunnelAnalytics = async (_req, res, next) => {
+    try {
+        const data = await analyticsService.getConversionFunnel();
+        return res.json({ success: true, data });
+    }
+    catch (err) {
+        next(err);
+        return;
+    }
+};
+export const abandonedCartsAnalytics = async (_req, res, next) => {
+    try {
+        const data = await analyticsService.getAbandonedCarts();
+        return res.json({ success: true, data });
+    }
+    catch (err) {
+        next(err);
+        return;
+    }
+};
+export const refundsAnalytics = async (_req, res, next) => {
+    try {
+        const data = await analyticsService.getRefundAnalytics();
+        return res.json({ success: true, data });
+    }
+    catch (err) {
+        next(err);
+        return;
+    }
+};
+export const shippingPerformanceAnalytics = async (_req, res, next) => {
+    try {
+        const data = await analyticsService.getShippingPerformance();
+        return res.json({ success: true, data });
+    }
+    catch (err) {
+        next(err);
+        return;
+    }
+};
+export const cohortsAnalytics = async (_req, res, next) => {
+    try {
+        const data = await analyticsService.getCohorts();
+        return res.json({ success: true, data });
+    }
+    catch (err) {
+        next(err);
+        return;
     }
 };

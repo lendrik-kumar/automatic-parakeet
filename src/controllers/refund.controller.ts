@@ -1,28 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/refund.service.js";
-import { RefundError } from "../services/refund.service.js";
 
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
-    return;
-  }
-  if (error instanceof RefundError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[RefundController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
 
 const createRefundSchema = z.object({
   paymentId: z.string().uuid(),
@@ -40,10 +19,17 @@ const bulkRefundSchema = z.object({
   status: z.enum(["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"]),
 });
 
+const exportQuerySchema = z.object({
+  status: z.enum(["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"]).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
 /** POST /admin/refunds */
 export const createRefund = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = createRefundSchema.parse(req.body);
@@ -52,7 +38,7 @@ export const createRefund = async (
       .status(201)
       .json({ success: true, message: "Refund created", data: { refund } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -60,6 +46,7 @@ export const createRefund = async (
 export const updateRefundStatus = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { status } = statusSchema.parse(req.body);
@@ -76,7 +63,7 @@ export const updateRefundStatus = async (
         data: { refund },
       });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -84,6 +71,7 @@ export const updateRefundStatus = async (
 export const listRefunds = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const result = await svc.listRefunds(
@@ -96,17 +84,17 @@ export const listRefunds = async (
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** GET /admin/refunds/:refundId */
-export const getRefund = async (req: Request, res: Response): Promise<void> => {
+export const getRefund = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const refund = await svc.getRefund(req.params.refundId);
     res.status(200).json({ success: true, data: { refund } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -114,6 +102,7 @@ export const getRefund = async (req: Request, res: Response): Promise<void> => {
 export const bulkProcessRefunds = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { refundIds, status } = bulkRefundSchema.parse(req.body);
@@ -124,6 +113,53 @@ export const bulkProcessRefunds = async (
       data: { updatedCount: result.count },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
+  }
+};
+
+/** GET /admin/refunds/analytics */
+export const refundAnalytics = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const analytics = await svc.getRefundAnalytics();
+    res.status(200).json({ success: true, data: analytics });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** POST /admin/refunds/:refundId/retry */
+export const retryRefund = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const refund = await svc.retryRefund(req.admin!.id, req.params.refundId);
+    res.status(200).json({
+      success: true,
+      message: "Refund retry initiated",
+      data: { refund },
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /admin/refunds/export */
+export const exportRefunds = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const filters = exportQuerySchema.parse(req.query);
+    const rows = await svc.exportRefunds(filters);
+    res.status(200).json({ success: true, data: { rows, count: rows.length } });
+  } catch (e) {
+    next(e);
   }
 };

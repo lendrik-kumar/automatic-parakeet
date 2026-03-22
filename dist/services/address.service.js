@@ -1,13 +1,42 @@
 import { addressRepository } from "../repositories/address.repository.js";
+import { AppError } from "../utils/AppError.js";
 // ─── Custom Error ───────────────────────────────────────────────────────────
-export class AddressError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "AddressError";
-    }
+export class AddressError extends AppError {
 }
+const INDIA_PINCODE_REGEX = /^\d{6}$/;
+const US_ZIP_REGEX = /^\d{5}(?:-\d{4})?$/;
+const PHONE_REGEX = /^\+?[1-9]\d{7,14}$/;
+const NAME_REGEX = /^[A-Za-z][A-Za-z\s.'-]{1,254}$/;
+const validateAddressFormat = (data) => {
+    if (!NAME_REGEX.test(data.fullName.trim())) {
+        throw new AddressError(400, "Invalid full name format");
+    }
+    if (!PHONE_REGEX.test(data.phone.trim())) {
+        throw new AddressError(400, "Invalid phone number format");
+    }
+    const postalCode = data.postalCode.trim();
+    const countryHint = `${data.state} ${data.city}`.toUpperCase();
+    const looksLikeIndia = countryHint.includes("INDIA") ||
+        countryHint.includes("DELHI") ||
+        countryHint.includes("MUMBAI") ||
+        countryHint.includes("BENGALURU");
+    const looksLikeUS = countryHint.includes("USA") ||
+        countryHint.includes("UNITED STATES") ||
+        countryHint.includes("CALIFORNIA") ||
+        countryHint.includes("NEW YORK");
+    if (looksLikeIndia && !INDIA_PINCODE_REGEX.test(postalCode)) {
+        throw new AddressError(400, "Invalid India postal code format");
+    }
+    if (looksLikeUS && !US_ZIP_REGEX.test(postalCode)) {
+        throw new AddressError(400, "Invalid US ZIP code format");
+    }
+    if (!looksLikeIndia && !looksLikeUS) {
+        const genericPostal = /^[A-Za-z0-9\s-]{3,12}$/;
+        if (!genericPostal.test(postalCode)) {
+            throw new AddressError(400, "Invalid postal code format");
+        }
+    }
+};
 // ─── Service Functions ──────────────────────────────────────────────────────
 /**
  * Get all addresses for a user
@@ -35,6 +64,7 @@ export const getAddressById = async (userId, addressId) => {
  * If this is the first address, automatically set it as default shipping and billing
  */
 export const createAddress = async (userId, data) => {
+    validateAddressFormat(data);
     // Check if user has any existing addresses
     const existingCount = await addressRepository.countByUserId(userId);
     const isFirstAddress = existingCount === 0;

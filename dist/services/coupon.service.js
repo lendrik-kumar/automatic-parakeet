@@ -1,12 +1,7 @@
 import { couponRepository } from "../repositories/coupon.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
-export class CouponError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "CouponError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class CouponError extends AppError {
 }
 export const createCoupon = async (adminId, data) => {
     const existing = await couponRepository.findByCode(data.code);

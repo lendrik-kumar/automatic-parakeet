@@ -43,6 +43,7 @@ import type { Gender } from "../generated/prisma/enums.js";
 
 import { userRepository } from "../repositories/user.repository.js";
 import { userSessionRepository } from "../repositories/user-session.repository.js";
+import { AppError } from "../utils/AppError.js";
 
 // ─── Token Helpers ────────────────────────────────────────────────────────────
 
@@ -70,27 +71,17 @@ export const extractRequestInfo = (req: {
 
 // ─── Custom Error Class ───────────────────────────────────────────────────────
 
-export class AuthError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "AuthError";
-  }
-}
+export class AuthError extends AppError {}
 
 // ─── Registration Flow ────────────────────────────────────────────────────────
 
 /**
  * Step 1 — Validate phone, generate & send OTP via SMS, create session.
  * POST /auth/register/initiate-phone
+ * SIMPLIFIED: Only requires phone number (no firstName, lastName, gender)
  */
 export const initiatePhoneRegistration = async (data: {
   phoneNumber: string;
-  firstName: string;
-  lastName: string;
-  gender: "MEN" | "WOMEN" | "UNISEX" | "KIDS";
 }): Promise<{ sessionId: string; devOtp?: string }> => {
   const existing = await userRepository.findByPhone(data.phoneNumber);
   if (existing) throw new AuthError(409, "Phone number already in use");
@@ -104,13 +95,13 @@ export const initiatePhoneRegistration = async (data: {
   const result = await sendOTPViaSMS(data.phoneNumber, "registration");
   if (!result.success) throw new AuthError(500, "Failed to send OTP");
 
-  // Create registration session with user data
+  // Create registration session with ONLY phone number
   const sessionId = crypto.randomBytes(32).toString("hex");
   const sessionData = {
     phoneNumber: data.phoneNumber,
-    firstName: data.firstName,
-    lastName: data.lastName,
-    gender: data.gender,
+    firstName: "",
+    lastName: "",
+    gender: "",
     phoneVerified: false,
     emailVerified: false,
     createdAt: new Date().toISOString(),
@@ -277,10 +268,14 @@ export const resendEmailOTP = async (
 /**
  * Step 5 — Hash password, create User, create UserSession, issue tokens.
  * POST /auth/register/complete
+ * NOW ACCEPTS: firstName, lastName, gender in the request body (not from session)
  */
 export const completeRegistration = async (
   sessionId: string,
   data: {
+    firstName: string;
+    lastName: string;
+    gender: "MEN" | "WOMEN" | "UNISEX" | "KIDS";
     email: string;
     password: string;
     dateOfBirth: string; // ISO date string YYYY-MM-DD
@@ -295,9 +290,10 @@ export const completeRegistration = async (
 
   const phoneNumber = session.phoneNumber as string;
   const email = session.email as string;
-  const firstName = session.firstName as string;
-  const lastName = session.lastName as string;
-  const gender = session.gender as Gender;
+  // Get firstName, lastName, gender from request data (not session)
+  const firstName = data.firstName;
+  const lastName = data.lastName;
+  const gender = data.gender as Gender;
 
   // Validate email from session matches provided email
   if (email !== data.email) {

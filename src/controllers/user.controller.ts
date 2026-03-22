@@ -1,10 +1,7 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as svc from "../services/user-auth.service.js";
-import {
-  AuthError,
-  extractRequestInfo,
-} from "../services/user-auth.service.js";
+import { extractRequestInfo } from "../services/user-auth.service.js";
 
 // ─── Zod Validation Schemas ───────────────────────────────────────────────────────────
 
@@ -12,9 +9,6 @@ const initiatePhoneSchema = z.object({
   phoneNumber: z
     .string()
     .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format"),
-  firstName: z.string().min(2, "First name must be at least 2 characters"),
-  lastName: z.string().min(2, "Last name must be at least 2 characters"),
-  gender: z.enum(["MEN", "WOMEN", "UNISEX", "KIDS"]),
 });
 
 const phoneSchema = z.object({
@@ -30,6 +24,9 @@ const verifyPhoneSchema = z.object({
 
 const completeRegistrationSchema = z.object({
   sessionId: z.string(),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  gender: z.enum(["MEN", "WOMEN", "UNISEX", "KIDS"]),
   email: z.string().email("Invalid email format"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   dateOfBirth: z
@@ -82,33 +79,13 @@ const verifyEmailOTPSchema = z.object({
   otp: z.string().length(6, "OTP must be 6 digits"),
 });
 
-// ─── Error Handler Helper ────────────────────────────────────────────────────────────────
-
-const handleError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res.status(400).json({
-      success: false,
-      message: "Validation error",
-      errors: error.issues,
-    });
-    return;
-  }
-  if (error instanceof AuthError) {
-    res
-      .status(error.statusCode)
-      .json({ success: false, message: error.message });
-    return;
-  }
-  console.error("[UserController]", error);
-  res.status(500).json({ success: false, message: "Internal server error" });
-};
-
 // ─── Registration Handlers ──────────────────────────────────────────────────────────
 
 /** POST /auth/register/initiate-phone */
 export const initiatePhoneRegistration = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = initiatePhoneSchema.parse(req.body);
@@ -120,7 +97,7 @@ export const initiatePhoneRegistration = async (
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -128,6 +105,7 @@ export const initiatePhoneRegistration = async (
 export const resendPhoneRegistrationOTP = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { phoneNumber } = phoneSchema.parse(req.body);
@@ -138,7 +116,7 @@ export const resendPhoneRegistrationOTP = async (
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -146,6 +124,7 @@ export const resendPhoneRegistrationOTP = async (
 export const verifyPhoneOTP = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { phoneNumber, otp } = verifyPhoneSchema.parse(req.body);
@@ -156,7 +135,7 @@ export const verifyPhoneOTP = async (
       sessionId,
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -164,6 +143,7 @@ export const verifyPhoneOTP = async (
 export const initiateEmailVerificationOTP = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { sessionId, email, firstName } = initiateEmailOTPSchema.parse(
@@ -180,7 +160,7 @@ export const initiateEmailVerificationOTP = async (
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -188,6 +168,7 @@ export const initiateEmailVerificationOTP = async (
 export const verifyEmailOTPHandler = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { sessionId, email, otp } = verifyEmailOTPSchema.parse(req.body);
@@ -197,7 +178,7 @@ export const verifyEmailOTPHandler = async (
       message: "Email verified successfully",
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -205,6 +186,7 @@ export const verifyEmailOTPHandler = async (
 export const resendEmailOTPHandler = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { sessionId, email, firstName } = initiateEmailOTPSchema.parse(
@@ -217,7 +199,7 @@ export const resendEmailOTPHandler = async (
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -225,6 +207,7 @@ export const resendEmailOTPHandler = async (
 export const completeRegistration = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const data = completeRegistrationSchema.parse(req.body);
@@ -236,7 +219,7 @@ export const completeRegistration = async (
       data: result,
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -244,6 +227,7 @@ export const completeRegistration = async (
 export const loginWithPhone = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { phoneNumber, otp } = verifyPhoneSchema.parse(req.body);
@@ -253,7 +237,7 @@ export const loginWithPhone = async (
       .status(200)
       .json({ success: true, message: "Login successful", data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -263,6 +247,7 @@ export const loginWithPhone = async (
 export const requestLoginOTP = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { phoneNumber } = phoneSchema.parse(req.body);
@@ -273,7 +258,7 @@ export const requestLoginOTP = async (
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -281,6 +266,7 @@ export const requestLoginOTP = async (
 export const resendLoginOTP = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { phoneNumber } = phoneSchema.parse(req.body);
@@ -291,7 +277,7 @@ export const resendLoginOTP = async (
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -299,6 +285,7 @@ export const resendLoginOTP = async (
 export const loginWithEmail = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { email, password } = loginWithEmailSchema.parse(req.body);
@@ -308,25 +295,25 @@ export const loginWithEmail = async (
       .status(200)
       .json({ success: true, message: "Login successful", data: result });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 // ─── Session Handlers ────────────────────────────────────────────────────────────────
 
 /** POST /auth/logout */
-export const logout = async (req: Request, res: Response): Promise<void> => {
+export const logout = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { refreshToken } = refreshTokenSchema.parse(req.body);
     await svc.logout(refreshToken);
     res.status(200).json({ success: true, message: "Logged out successfully" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
 /** POST /auth/logout/all */
-export const logoutAll = async (req: Request, res: Response): Promise<void> => {
+export const logoutAll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ success: false, message: "Not authenticated" });
@@ -337,7 +324,7 @@ export const logoutAll = async (req: Request, res: Response): Promise<void> => {
       .status(200)
       .json({ success: true, message: "Logged out from all devices" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -345,6 +332,7 @@ export const logoutAll = async (req: Request, res: Response): Promise<void> => {
 export const refreshAccessToken = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { refreshToken } = refreshTokenSchema.parse(req.body);
@@ -355,7 +343,7 @@ export const refreshAccessToken = async (
       data: result,
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -363,6 +351,7 @@ export const refreshAccessToken = async (
 export const listSessions = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.user) {
@@ -372,7 +361,7 @@ export const listSessions = async (
     const sessions = await svc.listSessions(req.user.id);
     res.status(200).json({ success: true, data: { sessions } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -380,6 +369,7 @@ export const listSessions = async (
 export const revokeSession = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.user) {
@@ -391,7 +381,7 @@ export const revokeSession = async (
       .status(200)
       .json({ success: true, message: "Session revoked successfully" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -401,6 +391,7 @@ export const revokeSession = async (
 export const forgotPassword = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { email } = forgotPasswordSchema.parse(req.body);
@@ -411,7 +402,7 @@ export const forgotPassword = async (
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -419,6 +410,7 @@ export const forgotPassword = async (
 export const resetPassword = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     const { email, otp, newPassword } = resetPasswordSchema.parse(req.body);
@@ -427,7 +419,7 @@ export const resetPassword = async (
       .status(200)
       .json({ success: true, message: "Password reset successfully" });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -437,6 +429,7 @@ export const resetPassword = async (
 export const getCurrentUser = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.user) {
@@ -450,7 +443,7 @@ export const getCurrentUser = async (
     }
     res.status(200).json({ success: true, data: { user } });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };
 
@@ -458,6 +451,7 @@ export const getCurrentUser = async (
 export const updateUserProfile = async (
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> => {
   try {
     if (!req.user) {
@@ -472,6 +466,6 @@ export const updateUserProfile = async (
       data: { user },
     });
   } catch (e) {
-    handleError(res, e);
+    next(e);
   }
 };

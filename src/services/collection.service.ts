@@ -6,16 +6,9 @@ import {
 import { adminRepository } from "../repositories/admin.repository.js";
 import { slugify } from "../utils/slugify.js";
 import type { CollectionStatus } from "../generated/prisma/enums.js";
+import { AppError } from "../utils/AppError.js";
 
-export class CollectionError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "CollectionError";
-  }
-}
+export class CollectionError extends AppError {}
 
 export const listCollections = async (
   page = 1,

@@ -1,6 +1,6 @@
 import * as svc from "../services/activity-log.service.js";
 /** GET /admin/activity-logs */
-export const listActivityLogs = async (req, res) => {
+export const listActivityLogs = async (req, res, next) => {
     try {
         const result = await svc.listActivityLogs({
             page: Number(req.query.page) || undefined,
@@ -12,12 +12,11 @@ export const listActivityLogs = async (req, res) => {
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        console.error("[ActivityLogController]", e);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        next(e);
     }
 };
 /** GET /admin/activity-logs/export */
-export const exportActivityLogs = async (req, res) => {
+export const exportActivityLogs = async (req, res, next) => {
     try {
         const result = await svc.exportActivityLogs({
             adminId: req.query.adminId,
@@ -27,7 +26,6 @@ export const exportActivityLogs = async (req, res) => {
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {
-        console.error("[ActivityLogController]", e);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        next(e);
     }
 };

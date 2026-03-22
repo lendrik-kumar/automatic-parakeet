@@ -25,9 +25,11 @@ import cartRouter from "./routes/cart.routes.js";
 import wishlistRouter from "./routes/wishlist.routes.js";
 import orderRouter from "./routes/order.routes.js";
 import returnRouter from "./routes/return.routes.js";
-import couponRouter from "./routes/coupon.routes.js";
 import paymentRouter from "./routes/payment.routes.js";
 import addressRouter from "./routes/address.routes.js";
+import paymentMethodRouter from "./routes/payment-method.routes.js";
+import reviewRouter from "./routes/review.routes.js";
+import { globalErrorHandler } from "./middlewares/errorHandler.middleware.js";
 app.get("/", (req, res) => {
     res.send("Hello, World!");
 });
@@ -39,13 +41,18 @@ app.use("/api/cart", cartRouter);
 app.use("/api/wishlist", wishlistRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/returns", returnRouter);
-app.use("/api/coupons", couponRouter);
 app.use("/api/payments", paymentRouter);
+app.use("/api/payment-methods", paymentMethodRouter);
+app.use("/api/reviews", reviewRouter);
 app.use("/api/user/addresses", addressRouter);
+// 404 handler (before error handler)
 app.use((req, res) => {
     res.status(404).json({
         success: false,
-        message: "Page not found",
+        message: "Route not found",
+        path: req.originalUrl,
     });
 });
+// Global error handler (MUST be last)
+app.use(globalErrorHandler);
 app.listen(port, () => console.log("Server is working on Port:" + port + " in " + envMode + " Mode."));

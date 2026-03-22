@@ -1,13 +1,8 @@
 import { shippingRepository } from "../repositories/shipping.repository.js";
 import { orderRepository } from "../repositories/order.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
-export class ShippingError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "ShippingError";
-    }
+import { AppError } from "../utils/AppError.js";
+export class ShippingError extends AppError {
 }
 // ── Shipping Methods ──────────────────────────────────────────────────────────
 export const createMethod = async (adminId, data) => {
