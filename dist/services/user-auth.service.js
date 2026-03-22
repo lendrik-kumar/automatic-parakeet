@@ -14,9 +14,9 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { JWT_SECRET, ACCESS_TOKEN_EXPIRY } from "../lib/auth.js";
-import { storeOTP, verifyOTP, deleteOTP, storeSession, getSession, deleteSession, storePasswordResetToken, verifyPasswordResetToken, deletePasswordResetToken, } from "../lib/redis.js";
-import { sendOTPViaSMS, sendLoginAlertSMS } from "../lib/sms.js";
-import { sendEmailVerification, sendWelcomeEmail, sendLoginNotification, sendPasswordResetEmail, sendPasswordChangedNotification, } from "../lib/email.js";
+import { storeOTP, verifyOTP, deleteOTP, storeSession, getSession, deleteSession, updateSession, reservePhone, reserveEmail, getPhoneReservation, getEmailReservation, releasePhoneReservation, releaseEmailReservation, } from "../lib/redis.js";
+import { sendOTPViaSMS, sendLoginAlertSMS, generateOTP } from "../lib/sms.js";
+import { sendOTPEmail, sendWelcomeEmail, sendLoginNotification, sendPasswordResetEmail, sendPasswordChangedNotification, } from "../lib/email.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { userSessionRepository } from "../repositories/user-session.repository.js";
 // ─── Token Helpers ────────────────────────────────────────────────────────────
@@ -41,105 +41,211 @@ export class AuthError extends Error {
 }
 // ─── Registration Flow ────────────────────────────────────────────────────────
 /**
- * Step 1 — Validate phone, generate & send OTP via Twilio.
+ * Step 1 — Validate phone, generate & send OTP via SMS, create session.
  * POST /auth/register/initiate-phone
  */
-export const initiatePhoneRegistration = async (phoneNumber) => {
-    const existing = await userRepository.findByPhone(phoneNumber);
+export const initiatePhoneRegistration = async (data) => {
+    const existing = await userRepository.findByPhone(data.phoneNumber);
     if (existing)
-        throw new AuthError(409, "Phone number already registered");
-    const result = await sendOTPViaSMS(phoneNumber, "registration");
+        throw new AuthError(409, "Phone number already in use");
+    // Check if phone is reserved by another session
+    const reservation = await getPhoneReservation(data.phoneNumber);
+    if (reservation) {
+        throw new AuthError(409, "Phone number already in use");
+    }
+    const result = await sendOTPViaSMS(data.phoneNumber, "registration");
     if (!result.success)
         throw new AuthError(500, "Failed to send OTP");
-    return { devOtp: result.otp }; // otp only present outside production
+    // Create registration session with user data
+    const sessionId = crypto.randomBytes(32).toString("hex");
+    const sessionData = {
+        phoneNumber: data.phoneNumber,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        gender: data.gender,
+        phoneVerified: false,
+        emailVerified: false,
+        createdAt: new Date().toISOString(),
+        expiresIn: 30 * 60, // 30 minutes in seconds
+    };
+    await storeSession(sessionId, sessionData, 30 * 60); // 30 min TTL
+    await reservePhone(data.phoneNumber, sessionId, 30); // 30 min TTL
+    return { sessionId, devOtp: result.otp }; // otp only present outside production
 };
 /**
  * Resend phone OTP (for registration or login).
+ * This will generate a NEW OTP and update Redis to prevent security issues.
  * POST /auth/register/resend-phone-otp or /auth/login/resend-otp
  */
 export const resendPhoneOTP = async (phoneNumber, purpose) => {
-    const result = await sendOTPViaSMS(phoneNumber, purpose);
+    // Force new OTP generation on resend for security
+    const result = await sendOTPViaSMS(phoneNumber, purpose, 10, true);
     if (!result.success)
         throw new AuthError(500, "Failed to resend OTP");
     return { devOtp: result.otp };
 };
 /**
- * Step 2a — Verify phone OTP, create a short-lived Redis session that
- * carries the phone number to the next step.
+ * Step 2 — Verify phone OTP, update session to mark phone verified.
  * POST /auth/register/verify-phone
  */
 export const verifyPhoneOTP = async (phoneNumber, otp) => {
-    const valid = await verifyOTP(phoneNumber, otp);
+    const valid = await verifyOTP(`phone:${phoneNumber}`, otp);
     if (!valid)
         throw new AuthError(400, "Invalid or expired OTP");
-    await deleteOTP(phoneNumber);
-    const sessionId = crypto.randomBytes(32).toString("hex");
-    await storeSession(sessionId, { phoneNumber, phoneVerified: true }, 30 * 60); // 30 min
+    await deleteOTP(`phone:${phoneNumber}`);
+    // Get the session ID from phone reservation
+    const sessionId = await getPhoneReservation(phoneNumber);
+    if (!sessionId) {
+        throw new AuthError(400, "Invalid or expired session");
+    }
+    // Verify session exists
+    const session = await getSession(sessionId);
+    if (!session) {
+        throw new AuthError(400, "Invalid or expired session");
+    }
+    // Update session to mark phone verified
+    await updateSession(sessionId, { phoneVerified: true });
     return { sessionId };
 };
 /**
- * Step 2b — Send email verification link via SendGrid.
- * POST /auth/register/initiate-email
+ * Step 3 — Initiate email verification with OTP (not URL).
+ * POST /auth/register/initiate-email-otp
  */
-export const initiateEmailVerification = async (email, firstName) => {
-    const token = crypto.randomBytes(32).toString("hex");
-    // Encode email inside token using base64 so we can look up the user at verify time
-    const encodedToken = Buffer.from(JSON.stringify({ email, token })).toString("base64url");
-    await storeOTP(`email:${email}`, token, 24 * 60); // 24 h
-    await sendEmailVerification(email, encodedToken, firstName);
+export const initiateEmailVerificationOTP = async (sessionId, email, firstName) => {
+    // Get and validate session
+    const session = await getSession(sessionId);
+    if (!session || session.phoneVerified !== true) {
+        throw new AuthError(400, "Invalid or expired session");
+    }
+    // Check email not already registered
+    const existing = await userRepository.findByEmail(email);
+    if (existing) {
+        throw new AuthError(409, "Email address already in use");
+    }
+    // Check email not reserved by another session
+    const reservation = await getEmailReservation(email);
+    if (reservation && reservation !== sessionId) {
+        throw new AuthError(409, "Email address already in use");
+    }
+    // Generate OTP
+    const otp = generateOTP();
+    const IS_PRODUCTION = process.env.NODE_ENV?.toUpperCase() === "PRODUCTION";
+    // Store OTP in Redis (10 min TTL)
+    await storeOTP(`email:${email}`, otp, 10, "email_verification");
+    // Send OTP via email
+    const sent = await sendOTPEmail(email, otp, firstName);
+    if (!sent && IS_PRODUCTION) {
+        throw new AuthError(500, "Failed to send verification email");
+    }
+    // Reserve email and update session
+    await reserveEmail(email, sessionId, 30); // 30 min TTL
+    await updateSession(sessionId, { email });
+    return { devOtp: IS_PRODUCTION ? undefined : otp };
 };
 /**
- * Resend the email verification link.
- * POST /auth/register/resend-email
+ * Step 4 — Verify email OTP.
+ * POST /auth/register/verify-email-otp
  */
-export const resendEmailVerification = async (email, firstName) => initiateEmailVerification(email, firstName);
-/**
- * Step 2c — Verify email token/OTP.
- * POST /auth/register/verify-email
- */
-export const verifyEmailToken = async (encodedToken) => {
-    let payload;
-    try {
-        payload = JSON.parse(Buffer.from(encodedToken, "base64url").toString());
+export const verifyEmailOTP = async (sessionId, email, otp) => {
+    // Get and validate session
+    const session = await getSession(sessionId);
+    if (!session || session.phoneVerified !== true || session.email !== email) {
+        throw new AuthError(400, "Invalid or expired session");
     }
-    catch {
-        throw new AuthError(400, "Invalid verification token");
+    // Verify OTP
+    const valid = await verifyOTP(`email:${email}`, otp);
+    if (!valid) {
+        throw new AuthError(400, "Invalid or expired OTP");
     }
-    const valid = await verifyOTP(`email:${payload.email}`, payload.token);
-    if (!valid)
-        throw new AuthError(400, "Invalid or expired email verification token");
-    await deleteOTP(`email:${payload.email}`);
-    return { email: payload.email };
+    await deleteOTP(`email:${email}`);
+    // Update session to mark email verified
+    await updateSession(sessionId, { emailVerified: true });
 };
 /**
- * Step 3 — Hash password, create User, create UserSession, issue tokens.
+ * Resend email verification OTP.
+ * POST /auth/register/resend-email-otp
+ */
+export const resendEmailOTP = async (sessionId, email, firstName) => {
+    // Get and validate session
+    const session = await getSession(sessionId);
+    if (!session || session.phoneVerified !== true || session.email !== email) {
+        throw new AuthError(400, "Invalid or expired session");
+    }
+    // Generate NEW OTP (force regeneration)
+    const otp = generateOTP();
+    const IS_PRODUCTION = process.env.NODE_ENV?.toUpperCase() === "PRODUCTION";
+    // Store OTP in Redis (10 min TTL) - overwrites existing
+    await storeOTP(`email:${email}`, otp, 10, "email_verification");
+    // Send OTP via email
+    const sent = await sendOTPEmail(email, otp, firstName);
+    if (!sent && IS_PRODUCTION) {
+        throw new AuthError(500, "Failed to send verification email");
+    }
+    return { devOtp: IS_PRODUCTION ? undefined : otp };
+};
+/**
+ * Step 5 — Hash password, create User, create UserSession, issue tokens.
  * POST /auth/register/complete
  */
 export const completeRegistration = async (sessionId, data, requestInfo) => {
     // Validate the temporary Redis session
     const session = await getSession(sessionId);
-    if (!session?.phoneVerified) {
-        throw new AuthError(400, "Invalid or expired registration session");
+    if (!session?.phoneVerified || !session?.emailVerified) {
+        throw new AuthError(400, "Phone and email verification required");
     }
     const phoneNumber = session.phoneNumber;
-    // Uniqueness checks
-    const conflict = await userRepository.findByUsernameOrEmail(data.username, data.email);
-    if (conflict) {
-        throw new AuthError(409, conflict.username === data.username
-            ? "Username already taken"
-            : "Email already registered");
+    const email = session.email;
+    const firstName = session.firstName;
+    const lastName = session.lastName;
+    const gender = session.gender;
+    // Validate email from session matches provided email
+    if (email !== data.email) {
+        throw new AuthError(400, "Email does not match verified email");
+    }
+    // Validate reservations are still held by this session
+    const phoneReservation = await getPhoneReservation(phoneNumber);
+    const emailReservation = await getEmailReservation(email);
+    if (phoneReservation !== sessionId || emailReservation !== sessionId) {
+        throw new AuthError(400, "Invalid or expired session");
+    }
+    // Validate and parse dateOfBirth
+    const dateOfBirth = new Date(data.dateOfBirth);
+    if (isNaN(dateOfBirth.getTime())) {
+        throw new AuthError(400, "Invalid date of birth format");
+    }
+    // Validate age (must be at least 13 years old)
+    const minAge = 13;
+    const today = new Date();
+    const minBirthDate = new Date(today.getFullYear() - minAge, today.getMonth(), today.getDate());
+    if (dateOfBirth > minBirthDate) {
+        throw new AuthError(400, `You must be at least ${minAge} years old to register`);
+    }
+    // Double-check phone/email not in DB (race condition protection)
+    const phoneExists = await userRepository.findByPhone(phoneNumber);
+    if (phoneExists) {
+        throw new AuthError(409, "Phone number already in use");
+    }
+    const emailExists = await userRepository.findByEmail(email);
+    if (emailExists) {
+        throw new AuthError(409, "Email address already in use");
     }
     const passwordHash = await bcrypt.hash(data.password, 12);
     const user = await userRepository.create({
-        firstName: data.firstName,
-        lastName: data.lastName,
-        username: data.username,
+        firstName,
+        lastName,
         email: data.email,
         passwordHash,
         phoneNumber,
+        gender,
+        dateOfBirth,
         phoneVerified: true,
+        emailVerified: true, // Email is verified via OTP
         status: "ACTIVE",
     });
+    // Release reservations
+    await releasePhoneReservation(phoneNumber);
+    await releaseEmailReservation(email);
+    // Delete session
     await deleteSession(sessionId);
     // Create DB session
     const refreshToken = newRefreshToken();
@@ -150,9 +256,8 @@ export const completeRegistration = async (sessionId, data, requestInfo) => {
         refreshToken,
     });
     const accessToken = signAccessToken(user.id, user.email);
-    // Fire-and-forget post-registration emails
+    // Send welcome email only (fire-and-forget)
     sendWelcomeEmail(user.email, user.firstName).catch(console.error);
-    initiateEmailVerification(user.email, user.firstName).catch(console.error);
     return { user, accessToken, refreshToken };
 };
 // ─── Login Flows ──────────────────────────────────────────────────────────────
@@ -176,10 +281,10 @@ export const requestLoginOTP = async (phoneNumber) => {
  * POST /auth/login/phone
  */
 export const loginWithPhone = async (phoneNumber, otp, requestInfo) => {
-    const valid = await verifyOTP(phoneNumber, otp);
+    const valid = await verifyOTP(`phone:${phoneNumber}`, otp);
     if (!valid)
         throw new AuthError(400, "Invalid or expired OTP");
-    await deleteOTP(phoneNumber);
+    await deleteOTP(`phone:${phoneNumber}`);
     const user = await userRepository.findByPhone(phoneNumber);
     if (!user)
         throw new AuthError(404, "User not found");
@@ -204,9 +309,10 @@ export const loginWithPhone = async (phoneNumber, otp, requestInfo) => {
             id: user.id,
             firstName: user.firstName,
             lastName: user.lastName,
-            username: user.username,
             email: user.email,
             phoneNumber: user.phoneNumber,
+            gender: user.gender,
+            dateOfBirth: user.dateOfBirth,
             status: user.status,
         },
         accessToken,
@@ -243,9 +349,10 @@ export const loginWithEmail = async (email, password, requestInfo) => {
             id: user.id,
             firstName: user.firstName,
             lastName: user.lastName,
-            username: user.username,
             email: user.email,
             phoneNumber: user.phoneNumber,
+            gender: user.gender,
+            dateOfBirth: user.dateOfBirth,
             status: user.status,
         },
         accessToken,
@@ -303,48 +410,36 @@ export const revokeSession = async (sessionId, userId) => {
 };
 // ─── Password Reset ───────────────────────────────────────────────────────────
 /**
- * Generate a password reset token and deliver it via SendGrid.
+ * Generate a password reset OTP and deliver it via email.
  * POST /auth/forgot-password
  */
 export const forgotPassword = async (email) => {
     const user = await userRepository.findByEmail(email);
     if (!user)
-        return; // Silently succeed to prevent email enumeration
-    const rawToken = crypto.randomBytes(32).toString("hex");
-    // Encode email in the token so we can look up the user at reset time
-    const encodedToken = Buffer.from(JSON.stringify({ email, token: rawToken })).toString("base64url");
-    await storePasswordResetToken(email, rawToken, 60); // 60 min
-    await sendPasswordResetEmail(email, encodedToken, user.firstName);
+        return {}; // Silently succeed to prevent email enumeration
+    const otp = generateOTP();
+    const IS_PRODUCTION = process.env.NODE_ENV?.toUpperCase() === "PRODUCTION";
+    await storeOTP(`password-reset:${email}`, otp, 10, "password_reset");
+    const sent = await sendPasswordResetEmail(email, otp, user.firstName);
+    if (!sent && IS_PRODUCTION) {
+        throw new AuthError(500, "Failed to send password reset OTP");
+    }
+    return { devOtp: IS_PRODUCTION ? undefined : otp };
 };
 /**
- * Validate a password reset token without consuming it.
- * GET /auth/reset-password/validate?token=...
- */
-export const validatePasswordResetToken = async (encodedToken) => {
-    let payload;
-    try {
-        payload = JSON.parse(Buffer.from(encodedToken, "base64url").toString());
-    }
-    catch {
-        throw new AuthError(400, "Invalid reset token");
-    }
-    const valid = await verifyPasswordResetToken(payload.email, payload.token);
-    if (!valid)
-        throw new AuthError(400, "Invalid or expired reset token");
-    return { email: payload.email };
-};
-/**
- * Reset password using a valid token.
+ * Reset password using a valid email OTP.
  * POST /auth/reset-password
  */
-export const resetPassword = async (encodedToken, newPassword) => {
-    const { email } = await validatePasswordResetToken(encodedToken);
+export const resetPassword = async (email, otp, newPassword) => {
+    const valid = await verifyOTP(`password-reset:${email}`, otp);
+    if (!valid)
+        throw new AuthError(400, "Invalid or expired OTP");
     const user = await userRepository.findByEmail(email);
     if (!user)
-        throw new AuthError(400, "Invalid reset token");
+        throw new AuthError(400, "Invalid or expired OTP");
     const passwordHash = await bcrypt.hash(newPassword, 12);
     await userRepository.update(user.id, { passwordHash });
-    await deletePasswordResetToken(email);
+    await deleteOTP(`password-reset:${email}`);
     // Invalidate all existing sessions for security
     await userSessionRepository.deleteAllByUser(user.id);
     // Notifications (fire-and-forget)
@@ -355,11 +450,19 @@ export const resetPassword = async (encodedToken, newPassword) => {
 export const getCurrentUser = (userId) => userRepository.getProfile(userId);
 /** Update mutable profile fields. */
 export const updateUserProfile = async (userId, fields) => {
-    if (fields.username) {
-        const taken = await userRepository.findByUsername(fields.username);
-        if (taken && taken.id !== userId) {
-            throw new AuthError(409, "Username already taken");
+    const updateData = {
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        phoneNumber: fields.phoneNumber,
+        gender: fields.gender,
+    };
+    // Validate and parse dateOfBirth if provided
+    if (fields.dateOfBirth) {
+        const dob = new Date(fields.dateOfBirth);
+        if (isNaN(dob.getTime())) {
+            throw new AuthError(400, "Invalid date of birth format");
         }
+        updateData.dateOfBirth = dob;
     }
-    return userRepository.update(userId, fields);
+    return userRepository.update(userId, updateData);
 };

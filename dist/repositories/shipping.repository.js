@@ -14,6 +14,42 @@ export const shippingRepository = {
             order: { select: { id: true, orderNumber: true, orderStatus: true } },
         },
     }),
+    findShipments: (skip, take, search) => {
+        const where = {};
+        if (search) {
+            where.OR = [
+                { trackingNumber: { contains: search, mode: "insensitive" } },
+                { courierName: { contains: search, mode: "insensitive" } },
+                { order: { orderNumber: { contains: search, mode: "insensitive" } } },
+            ];
+        }
+        return Promise.all([
+            prisma.shipment.findMany({
+                where: where,
+                skip,
+                take,
+                orderBy: { createdAt: "desc" },
+                include: {
+                    order: {
+                        select: {
+                            id: true,
+                            orderNumber: true,
+                            orderStatus: true,
+                            customer: {
+                                select: {
+                                    id: true,
+                                    firstName: true,
+                                    lastName: true,
+                                    email: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            }),
+            prisma.shipment.count({ where: where }),
+        ]);
+    },
     updateShipmentStatus: (id, shippingStatus, extra) => prisma.shipment.update({
         where: { id },
         data: { shippingStatus, ...extra },

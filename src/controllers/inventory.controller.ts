@@ -29,15 +29,32 @@ const updateInventorySchema = z.object({
   reorderThreshold: z.number().int().min(0).optional(),
 });
 
+const bulkInventorySchema = z.object({
+  updates: z
+    .array(
+      z.object({
+        variantId: z.string().uuid(),
+        stockQuantity: z.number().int().min(0).optional(),
+        reorderThreshold: z.number().int().min(0).optional(),
+      }),
+    )
+    .min(1),
+});
+
 /** GET /admin/inventory */
 export const listInventory = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const result = await svc.listInventory(
+    const result = await svc.listInventoryAdvanced(
       Number(req.query.page) || 1,
       Number(req.query.limit) || 20,
+      {
+        lowStock: req.query.lowStock === "true",
+        outOfStock: req.query.outOfStock === "true",
+        search: req.query.search as string,
+      },
     );
     res.status(200).json({ success: true, data: result });
   } catch (e) {
@@ -77,6 +94,37 @@ export const updateInventory = async (
         message: "Inventory updated",
         data: { inventory },
       });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** POST /admin/inventory/bulk/update */
+export const bulkUpdateInventory = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { updates } = bulkInventorySchema.parse(req.body);
+    const result = await svc.bulkUpdateInventory(req.admin!.id, updates);
+    res.status(200).json({
+      success: true,
+      message: "Inventory updated",
+      data: { updatedCount: result.length },
+    });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** GET /admin/inventory/alerts */
+export const getInventoryAlerts = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const data = await svc.getInventoryAlerts(Number(req.query.limit) || 50);
+    res.status(200).json({ success: true, data });
   } catch (e) {
     handleError(res, e);
   }

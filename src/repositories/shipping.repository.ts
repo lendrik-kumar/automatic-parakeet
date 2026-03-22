@@ -46,6 +46,45 @@ export const shippingRepository = {
       },
     }),
 
+  findShipments: (skip: number, take: number, search?: string) => {
+    const where: Record<string, unknown> = {};
+
+    if (search) {
+      where.OR = [
+        { trackingNumber: { contains: search, mode: "insensitive" } },
+        { courierName: { contains: search, mode: "insensitive" } },
+        { order: { orderNumber: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    return Promise.all([
+      prisma.shipment.findMany({
+        where: where as never,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+        include: {
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              orderStatus: true,
+              customer: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.shipment.count({ where: where as never }),
+    ]);
+  },
+
   updateShipmentStatus: (
     id: string,
     shippingStatus: ShippingStatus,

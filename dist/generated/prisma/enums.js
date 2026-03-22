@@ -28,6 +28,22 @@ export const AdminActionType = {
     ACTIVATE: 'ACTIVATE',
     DEACTIVATE: 'DEACTIVATE'
 };
+export const ReviewStatus = {
+    PENDING: 'PENDING',
+    APPROVED: 'APPROVED',
+    REJECTED: 'REJECTED',
+    FLAGGED: 'FLAGGED'
+};
+export const CollectionStatus = {
+    ACTIVE: 'ACTIVE',
+    INACTIVE: 'INACTIVE',
+    ARCHIVED: 'ARCHIVED'
+};
+export const CategoryStatus = {
+    ACTIVE: 'ACTIVE',
+    INACTIVE: 'INACTIVE',
+    ARCHIVED: 'ARCHIVED'
+};
 export const OrderStatus = {
     PENDING: 'PENDING',
     CONFIRMED: 'CONFIRMED',

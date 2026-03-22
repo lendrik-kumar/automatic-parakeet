@@ -120,3 +120,23 @@ export const updateAdminStatus = async (
     handleError(res, e);
   }
 };
+
+/** GET /admin/admins/:adminId */
+export const getAdmin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const admin = await svc.getAdmin(req.params.adminId);
+    res.status(200).json({ success: true, data: { admin } });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** DELETE /admin/admins/:adminId */
+export const deleteAdmin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    await svc.deleteAdmin(req.admin!.id, req.params.adminId);
+    res.status(200).json({ success: true, message: "Admin deleted" });
+  } catch (e) {
+    handleError(res, e);
+  }
+};

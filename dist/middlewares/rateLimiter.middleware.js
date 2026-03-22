@@ -13,7 +13,7 @@ export const authLimiter = rateLimit({
 // Rate limiter for OTP endpoints (very restrictive)
 export const otpLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 3, // Limit each IP to 3 requests per windowMs
+    max: 10, // Limit each IP to 10 requests per windowMs
     message: {
         success: false,
         message: "Too many OTP requests, please try again later",

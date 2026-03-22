@@ -61,14 +61,42 @@ export const listRefunds = async (
   page = 1,
   limit = 20,
   status?: RefundStatus,
+  search?: string,
+  startDate?: string,
+  endDate?: string,
 ) => {
   const skip = (page - 1) * limit;
-  const where: Record<string, unknown> = {};
-  if (status) where.refundStatus = status;
-
-  const [refunds, total] = await refundRepository.findMany(skip, limit, where);
+  const [refunds, total] = await refundRepository.findManyAdvanced(skip, limit, {
+    status,
+    search,
+    startDate: startDate ? new Date(startDate) : undefined,
+    endDate: endDate ? new Date(endDate) : undefined,
+  });
   return {
     refunds,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
+};
+
+export const getRefund = async (refundId: string) => {
+  const refund = await refundRepository.findById(refundId);
+  if (!refund) throw new RefundError(404, "Refund not found");
+  return refund;
+};
+
+export const bulkProcessRefunds = async (
+  adminId: string,
+  refundIds: string[],
+  status: RefundStatus,
+) => {
+  if (!refundIds.length) throw new RefundError(400, "Refund IDs are required");
+
+  const result = await refundRepository.bulkUpdateStatus(refundIds, status);
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "Refund",
+    "bulk-process",
+  );
+  return result;
 };

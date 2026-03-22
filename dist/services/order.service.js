@@ -153,6 +153,458 @@ export const checkout = async (userId, data) => {
         },
     };
 };
+// ─── New 3-Step Checkout Flow ───────────────────────────────────────────────
+/**
+ * Step 1: Validate checkout - Pre-flight checks
+ */
+export const validateCheckout = async (userId, data) => {
+    // 1. Validate address
+    const address = await prisma.address.findUnique({
+        where: { id: data.addressId },
+    });
+    if (!address || address.userId !== userId) {
+        throw new OrderError(400, "Invalid address");
+    }
+    // 2. Get user's cart
+    const cart = await cartRepository.findByCustomerId(userId);
+    if (!cart || !cart.items.length) {
+        throw new OrderError(400, "Cart is empty");
+    }
+    // 3. Validate inventory for each item
+    const stockIssues = [];
+    for (const item of cart.items) {
+        const inv = await inventoryRepository.findByVariantId(item.variantId);
+        if (!inv || inv.availableStock < item.quantity) {
+            stockIssues.push({
+                productName: item.product.name,
+                requestedQuantity: item.quantity,
+                availableStock: inv?.availableStock || 0,
+            });
+        }
+    }
+    if (stockIssues.length > 0) {
+        return {
+            valid: false,
+            message: "Some items are out of stock",
+            stockIssues,
+        };
+    }
+    // 4. Calculate totals
+    const subtotal = cart.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const taxAmount = Math.round(subtotal * 0.08 * 100) / 100;
+    const shippingCost = 10.0; // Default shipping, can be dynamic
+    let discountAmount = 0;
+    let couponDetails = null;
+    // 5. Validate coupon if provided
+    if (data.couponCode) {
+        const coupon = await couponRepository.findByCode(data.couponCode);
+        if (!coupon) {
+            return { valid: false, message: "Invalid coupon code" };
+        }
+        if (coupon.status !== "ACTIVE") {
+            return { valid: false, message: "Coupon is not active" };
+        }
+        if (coupon.expiryDate < new Date()) {
+            return { valid: false, message: "Coupon has expired" };
+        }
+        if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+            return { valid: false, message: "Coupon usage limit reached" };
+        }
+        if (coupon.minimumOrderValue && subtotal < coupon.minimumOrderValue) {
+            return {
+                valid: false,
+                message: `Minimum order value is $${coupon.minimumOrderValue}`,
+            };
+        }
+        if (coupon.discountType === "PERCENTAGE") {
+            discountAmount =
+                Math.round(subtotal * (coupon.discountValue / 100) * 100) / 100;
+        }
+        else {
+            discountAmount = coupon.discountValue;
+        }
+        if (coupon.maximumDiscount && discountAmount > coupon.maximumDiscount) {
+            discountAmount = coupon.maximumDiscount;
+        }
+        couponDetails = {
+            code: coupon.code,
+            discountType: coupon.discountType,
+            discountValue: coupon.discountValue,
+            discountAmount,
+        };
+    }
+    const totalAmount = Math.round((subtotal + taxAmount + shippingCost - discountAmount) * 100) /
+        100;
+    return {
+        valid: true,
+        message: "Checkout validation successful",
+        summary: {
+            subtotal,
+            taxAmount,
+            shippingCost,
+            discountAmount,
+            totalAmount,
+            itemCount: cart.items.length,
+        },
+        coupon: couponDetails,
+        address: {
+            id: address.id,
+            fullName: address.fullName,
+            phone: address.phone,
+            addressLine1: address.addressLine1,
+            city: address.city,
+            state: address.state,
+            postalCode: address.postalCode,
+        },
+    };
+};
+/**
+ * Step 2: Create order - Reserve stock and create order
+ */
+export const createCheckoutOrder = async (userId, data) => {
+    // 1. Get cart
+    const cart = await cartRepository.findByCustomerId(userId);
+    if (!cart || !cart.items.length) {
+        throw new OrderError(400, "Cart is empty");
+    }
+    // 2. Final inventory check
+    for (const item of cart.items) {
+        const inv = await inventoryRepository.findByVariantId(item.variantId);
+        if (!inv || inv.availableStock < item.quantity) {
+            throw new OrderError(400, `Insufficient stock for ${item.product.name}`);
+        }
+    }
+    // 3. Get shipping method
+    const shippingMethodName = data.shippingMethod || "Standard";
+    const shippingMethod = await prisma.shippingMethod.findUnique({
+        where: { name: shippingMethodName },
+    });
+    const shippingCost = shippingMethod?.cost || 10.0;
+    // 4. Calculate totals
+    const subtotal = cart.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const taxAmount = Math.round(subtotal * 0.08 * 100) / 100;
+    let discountAmount = 0;
+    // 5. Apply coupon
+    if (data.couponCode) {
+        const coupon = await couponRepository.findByCode(data.couponCode);
+        if (coupon &&
+            coupon.status === "ACTIVE" &&
+            coupon.expiryDate >= new Date()) {
+            if (coupon.discountType === "PERCENTAGE") {
+                discountAmount =
+                    Math.round(subtotal * (coupon.discountValue / 100) * 100) / 100;
+            }
+            else {
+                discountAmount = coupon.discountValue;
+            }
+            if (coupon.maximumDiscount && discountAmount > coupon.maximumDiscount) {
+                discountAmount = coupon.maximumDiscount;
+            }
+            await couponRepository.incrementUsage(coupon.id);
+        }
+    }
+    const totalAmount = Math.round((subtotal + taxAmount + shippingCost - discountAmount) * 100) /
+        100;
+    // 6. Get address
+    const address = await prisma.address.findUnique({
+        where: { id: data.addressId },
+    });
+    if (!address || address.userId !== userId) {
+        throw new OrderError(400, "Invalid address");
+    }
+    const addressSnapshot = JSON.stringify({
+        fullName: address.fullName,
+        phone: address.phone,
+        addressLine1: address.addressLine1,
+        addressLine2: address.addressLine2,
+        city: address.city,
+        state: address.state,
+        postalCode: address.postalCode,
+        landmark: address.landmark,
+    });
+    // 7. Create order in transaction
+    const order = await prisma.$transaction(async (tx) => {
+        // Create order
+        const newOrder = await tx.order.create({
+            data: {
+                orderNumber: generateOrderNumber(),
+                customerId: userId,
+                subtotal,
+                taxAmount,
+                shippingCost,
+                discountAmount,
+                totalAmount,
+            },
+        });
+        // Create order items
+        for (const item of cart.items) {
+            await tx.orderItem.create({
+                data: {
+                    orderId: newOrder.id,
+                    productId: item.productId,
+                    variantId: item.variantId,
+                    productNameSnapshot: item.product.name,
+                    size: item.size,
+                    color: item.color,
+                    quantity: item.quantity,
+                    price: item.unitPrice,
+                    total: item.totalPrice,
+                },
+            });
+        }
+        // Create order address
+        await tx.orderAddress.create({
+            data: {
+                orderId: newOrder.id,
+                shippingAddress: addressSnapshot,
+                billingAddress: addressSnapshot,
+            },
+        });
+        // Reserve stock
+        for (const item of cart.items) {
+            await tx.inventory.update({
+                where: { variantId: item.variantId },
+                data: { availableStock: { decrement: item.quantity } },
+            });
+        }
+        // Clear cart
+        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+        await tx.cart.update({
+            where: { id: cart.id },
+            data: {
+                totalItems: 0,
+                totalPrice: 0,
+                appliedDiscount: 0,
+                appliedCouponId: null,
+            },
+        });
+        return newOrder;
+    });
+    return await orderRepository.findById(order.id);
+};
+/**
+ * Step 3: Process payment - Placeholder for Razorpay integration
+ */
+export const processOrderPayment = async (userId, orderId, data) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order)
+        throw new OrderError(404, "Order not found");
+    if (order.customerId !== userId)
+        throw new OrderError(403, "Not your order");
+    // Check if payment already exists
+    const existingPayment = await prisma.payment.findFirst({
+        where: { orderId },
+    });
+    if (existingPayment && existingPayment.paymentStatus === "COMPLETED") {
+        throw new OrderError(400, "Order already paid");
+    }
+    // Create or update payment record
+    const payment = existingPayment
+        ? await prisma.payment.update({
+            where: { id: existingPayment.id },
+            data: {
+                paymentMethod: data.paymentMethod,
+                paymentProvider: "RAZORPAY",
+            },
+        })
+        : await prisma.payment.create({
+            data: {
+                orderId: order.id,
+                paymentMethod: data.paymentMethod,
+                paymentProvider: "RAZORPAY",
+                amount: order.totalAmount,
+                paymentStatus: "PENDING",
+            },
+        });
+    // TODO: Integrate with Razorpay
+    // For now, return payment session placeholder
+    return {
+        paymentId: payment.id,
+        orderId: order.id,
+        amount: order.totalAmount,
+        currency: "USD",
+        paymentMethod: data.paymentMethod,
+        status: payment.paymentStatus,
+        // Razorpay integration would provide:
+        // razorpayOrderId, razorpayKey, etc.
+    };
+};
+// ─── Reorder Functionality ──────────────────────────────────────────────────
+export const reorderFromOrder = async (userId, orderId) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order)
+        throw new OrderError(404, "Order not found");
+    if (order.customerId !== userId)
+        throw new OrderError(403, "Not your order");
+    // Get or create user's cart
+    const cartData = await cartRepository.findByCustomerId(userId);
+    const cart = cartData || (await cartRepository.findOrCreate(userId));
+    // Add items from order to cart
+    const addedItems = [];
+    const unavailableItems = [];
+    for (const orderItem of order.items) {
+        // Check if product and variant still exist and are available
+        const variant = await prisma.productVariant.findUnique({
+            where: { id: orderItem.variantId },
+            include: { product: true },
+        });
+        if (!variant || variant.product.status !== "ACTIVE") {
+            unavailableItems.push({
+                productName: orderItem.productNameSnapshot,
+                reason: "Product no longer available",
+            });
+            continue;
+        }
+        // Check stock
+        const inventory = await inventoryRepository.findByVariantId(variant.id);
+        if (!inventory || inventory.availableStock < orderItem.quantity) {
+            unavailableItems.push({
+                productName: orderItem.productNameSnapshot,
+                reason: "Insufficient stock",
+                availableStock: inventory?.availableStock || 0,
+            });
+            continue;
+        }
+        // Check if item already in cart
+        const existingItem = await cartRepository.findExistingItem(cart.id, orderItem.variantId, orderItem.size, orderItem.color);
+        if (existingItem) {
+            // Update quantity
+            const newQuantity = existingItem.quantity + orderItem.quantity;
+            const totalPrice = newQuantity * variant.price;
+            await cartRepository.updateItemQuantity(existingItem.id, newQuantity, totalPrice);
+        }
+        else {
+            // Add new item
+            await cartRepository.addItem({
+                cartId: cart.id,
+                productId: orderItem.productId,
+                variantId: orderItem.variantId,
+                size: orderItem.size,
+                color: orderItem.color,
+                quantity: orderItem.quantity,
+                unitPrice: variant.price,
+                totalPrice: orderItem.quantity * variant.price,
+            });
+        }
+        addedItems.push({
+            productName: variant.product.name,
+            quantity: orderItem.quantity,
+        });
+    }
+    // Recalculate cart totals
+    await cartRepository.updateCartTotals(cart.id);
+    return {
+        message: "Items added to cart",
+        addedItems,
+        unavailableItems,
+        cartId: cart.id,
+    };
+};
+// ─── Order Tracking ─────────────────────────────────────────────────────────
+export const getOrderTracking = async (userId, orderId) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order)
+        throw new OrderError(404, "Order not found");
+    if (order.customerId !== userId)
+        throw new OrderError(403, "Not your order");
+    const tracking = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        orderStatus: order.orderStatus,
+        placedAt: order.placedAt,
+        estimatedDelivery: null, // Add this field to schema if needed
+        timeline: [
+            {
+                status: "ORDER_PLACED",
+                timestamp: order.placedAt,
+                completed: true,
+                message: "Order placed successfully",
+            },
+            {
+                status: "CONFIRMED",
+                timestamp: order.orderStatus === "CONFIRMED" ? order.updatedAt : null,
+                completed: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.orderStatus),
+                message: "Order confirmed and being prepared",
+            },
+            {
+                status: "PROCESSING",
+                timestamp: order.orderStatus === "PROCESSING" ? order.updatedAt : null,
+                completed: ["PROCESSING", "SHIPPED", "DELIVERED"].includes(order.orderStatus),
+                message: "Order is being processed",
+            },
+            {
+                status: "SHIPPED",
+                timestamp: order.shipments[0]?.shippedAt ||
+                    (order.orderStatus === "SHIPPED" ? order.updatedAt : null),
+                completed: ["SHIPPED", "DELIVERED"].includes(order.orderStatus),
+                message: "Order has been shipped",
+            },
+            {
+                status: "DELIVERED",
+                timestamp: order.shipments[0]?.deliveredAt ||
+                    (order.orderStatus === "DELIVERED" ? order.updatedAt : null),
+                completed: order.orderStatus === "DELIVERED",
+                message: "Order delivered successfully",
+            },
+        ],
+        shipments: order.shipments.map((s) => ({
+            id: s.id,
+            carrier: s.courierName,
+            trackingNumber: s.trackingNumber,
+            trackingUrl: s.trackingNumber
+                ? `https://tracking.example.com/${s.trackingNumber}`
+                : null,
+            shippedAt: s.shippedAt,
+            deliveredAt: s.deliveredAt,
+            status: s.shippingStatus,
+        })),
+    };
+    return tracking;
+};
+// ─── Invoice Generation ─────────────────────────────────────────────────────
+export const generateOrderInvoice = async (userId, orderId) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order)
+        throw new OrderError(404, "Order not found");
+    if (order.customerId !== userId)
+        throw new OrderError(403, "Not your order");
+    // Parse address from snapshot
+    const shippingAddress = order.addresses
+        ? JSON.parse(order.addresses.shippingAddress)
+        : null;
+    // Generate invoice data (for now, return structured data)
+    // In production, this would generate a PDF
+    const invoice = {
+        invoiceNumber: `INV-${order.orderNumber}`,
+        orderNumber: order.orderNumber,
+        orderDate: order.placedAt,
+        customer: {
+            name: `${order.customer.firstName} ${order.customer.lastName}`,
+            email: order.customer.email,
+        },
+        shippingAddress,
+        items: order.items.map((item) => ({
+            name: item.productNameSnapshot,
+            size: item.size,
+            color: item.color,
+            quantity: item.quantity,
+            unitPrice: item.price,
+            total: item.total,
+        })),
+        summary: {
+            subtotal: order.subtotal,
+            tax: order.taxAmount,
+            shipping: order.shippingCost,
+            discount: order.discountAmount,
+            total: order.totalAmount,
+        },
+        payment: {
+            method: order.payments[0]?.paymentMethod || "N/A",
+            status: order.payments[0]?.paymentStatus || "PENDING",
+        },
+    };
+    return invoice;
+};
 // ─── Client Order Endpoints ───────────────────────────────────────────────────
 export const listUserOrders = async (userId, page = 1, limit = 10) => {
     const skip = (page - 1) * limit;
@@ -244,4 +696,72 @@ export const updateOrderStatus = async (adminId, orderId, status) => {
     const updated = await orderRepository.updateStatus(orderId, status);
     await adminRepository.logActivity(adminId, "UPDATE", "Order", orderId);
     return updated;
+};
+export const listAdminOrdersAdvanced = async (query) => {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+    const [orders, total] = await orderRepository.findManyAdvanced({
+        skip,
+        take: limit,
+        status: query.status,
+        paymentStatus: query.paymentStatus,
+        fulfillmentStatus: query.fulfillmentStatus,
+        startDate: query.startDate ? new Date(query.startDate) : undefined,
+        endDate: query.endDate ? new Date(query.endDate) : undefined,
+        customerId: query.customerId,
+        productId: query.productId,
+        search: query.search,
+    });
+    return {
+        orders,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+};
+export const bulkUpdateOrderStatus = async (adminId, orderIds, status) => {
+    if (!orderIds.length)
+        throw new OrderError(400, "Order IDs are required");
+    const result = await orderRepository.bulkUpdateStatus(orderIds, status);
+    await adminRepository.logActivity(adminId, "UPDATE", "Order", "bulk-status");
+    return result;
+};
+export const searchOrders = async (query, page = 1, limit = 20) => {
+    if (!query.trim())
+        throw new OrderError(400, "Search query is required");
+    const skip = (page - 1) * limit;
+    const [orders, total] = await orderRepository.searchMany(query, skip, limit);
+    return {
+        orders,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+};
+export const getOrderTimeline = async (orderId) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order)
+        throw new OrderError(404, "Order not found");
+    const timeline = [
+        { event: "ORDER_PLACED", at: order.placedAt, status: order.orderStatus },
+        ...order.payments
+            .filter((p) => p.paidAt)
+            .map((p) => ({
+            event: "PAYMENT_COMPLETED",
+            at: p.paidAt,
+            status: p.paymentStatus,
+        })),
+        ...order.shipments
+            .filter((s) => s.shippedAt)
+            .map((s) => ({
+            event: "SHIPPED",
+            at: s.shippedAt,
+            status: s.shippingStatus,
+        })),
+        ...order.shipments
+            .filter((s) => s.deliveredAt)
+            .map((s) => ({
+            event: "DELIVERED",
+            at: s.deliveredAt,
+            status: s.shippingStatus,
+        })),
+    ].sort((a, b) => a.at.getTime() - b.at.getTime());
+    return { orderId: order.id, orderNumber: order.orderNumber, timeline };
 };

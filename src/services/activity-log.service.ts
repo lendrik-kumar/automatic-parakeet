@@ -47,3 +47,26 @@ export const listActivityLogs = async (query: {
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 };
+
+export const exportActivityLogs = async (query: {
+  adminId?: string;
+  entityType?: string;
+  action?: AdminActionType;
+}) => {
+  const where: Record<string, unknown> = {};
+  if (query.adminId) where.adminId = query.adminId;
+  if (query.entityType) where.entityType = query.entityType;
+  if (query.action) where.action = query.action;
+
+  const logs = await prisma.adminActivityLog.findMany({
+    where: where as never,
+    orderBy: { timestamp: "desc" },
+    include: {
+      admin: {
+        select: { id: true, firstName: true, lastName: true, email: true },
+      },
+    },
+  });
+
+  return { logs, total: logs.length };
+};

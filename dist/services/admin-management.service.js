@@ -111,3 +111,33 @@ export const updateAdminStatus = async (requesterAdminId, adminId, status) => {
     await adminRepository.logActivity(requesterAdminId, action, "Admin", adminId);
     return admin;
 };
+export const getAdmin = async (adminId) => {
+    const admin = await prisma.admin.findUnique({
+        where: { id: adminId },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            profileImage: true,
+            accountStatus: true,
+            lastLogin: true,
+            createdAt: true,
+            updatedAt: true,
+            role: { select: { id: true, roleName: true, description: true } },
+        },
+    });
+    if (!admin)
+        throw new AdminManagementError(404, "Admin not found");
+    return admin;
+};
+export const deleteAdmin = async (requesterAdminId, adminId) => {
+    const existing = await adminRepository.findById(adminId);
+    if (!existing)
+        throw new AdminManagementError(404, "Admin not found");
+    if (adminId === requesterAdminId) {
+        throw new AdminManagementError(400, "Cannot delete your own account");
+    }
+    await prisma.admin.delete({ where: { id: adminId } });
+    await adminRepository.logActivity(requesterAdminId, "DELETE", "Admin", adminId);
+};

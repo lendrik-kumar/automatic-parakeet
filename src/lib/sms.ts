@@ -1,37 +1,19 @@
-import twilio from "twilio";
-import { storeOTP } from "./redis.js";
+import { storeOTP, getOTP } from "./redis.js";
 
-// ─── Twilio Configuration ─────────────────────────────────────────────────────
+// ─── Fast2SMS Configuration ───────────────────────────────────────────────────
 
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_PHONE = process.env.TWILIO_PHONE_NUMBER;
 const IS_PRODUCTION = process.env.NODE_ENV?.toUpperCase() === "PRODUCTION";
-
-/**
- * Lazily initialised Twilio client — avoids crashing on startup when
- * credentials are not set (dev / test environments).
- */
-let _client: ReturnType<typeof twilio> | null = null;
-
-const getTwilioClient = (): ReturnType<typeof twilio> => {
-  if (!_client) {
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-      throw new Error(
-        "Twilio credentials not configured. " +
-          "Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN env vars.",
-      );
-    }
-    _client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-  }
-  return _client;
-};
 
 // ─── Core Interface ───────────────────────────────────────────────────────────
 
 interface SMSOptions {
   phoneNumber: string;
   message: string;
+}
+
+interface OTPSMSOptions {
+  phoneNumber: string;
+  otp: string;
 }
 
 /**
@@ -42,77 +24,101 @@ export const generateOTP = (): string => {
 };
 
 /**
- * Core SMS sender using Twilio.
- * Falls back to a console log in non-production environments so the
- * server runs without real credentials during development / testing.
+ * Send a plain transactional SMS via Fast2SMS Quick route.
+ * Falls back to console log in non-production environments.
  */
 export const sendSMS = async (options: SMSOptions): Promise<boolean> => {
   try {
-    if (!IS_PRODUCTION) {
-      // ── Dev / Test mode ────────────────────────────────────────────────────
       console.log("━".repeat(55));
-      console.log("📱  TWILIO SMS  (dev mode — not actually sent)");
+      console.log("📱  FAST2SMS  (dev mode — not actually sent)");
       console.log(`  To  : ${options.phoneNumber}`);
       console.log(`  Body: ${options.message}`);
       console.log("━".repeat(55));
       return true;
-    }
-
-    // ── Production: send via Twilio ────────────────────────────────────────
-    if (!TWILIO_PHONE) {
-      throw new Error("TWILIO_PHONE_NUMBER env var is not set.");
-    }
-
-    const client = getTwilioClient();
-    await client.messages.create({
-      body: options.message,
-      from: TWILIO_PHONE,
-      to: options.phoneNumber,
-    });
-
-    return true;
   } catch (error) {
-    console.error("[Twilio] Failed to send SMS:", error);
+    console.error("[Fast2SMS] Failed to send SMS:", error);
     return false;
   }
 };
 
 /**
- * Generate an OTP, store it in Redis, and send it via Twilio SMS.
+ * Send OTP via Fast2SMS dedicated OTP route (variables_values = the OTP digit string).
+ * Falls back to console log in non-production environments.
+ */
+export const sendOTPSMS = async (options: OTPSMSOptions): Promise<boolean> => {
+  try {
+      console.log("━".repeat(55));
+      console.log("📱  FAST2SMS OTP  (dev mode — not actually sent)");
+      console.log(`  To : ${options.phoneNumber}`);
+      console.log(`  OTP: ${options.otp}`);
+      console.log("━".repeat(55));
+      return true;
+  } catch (error) {
+    console.error("[Fast2SMS] Failed to send OTP SMS:", error);
+    return false;
+  }
+};
+
+/**
+ * Generate an OTP, store it in Redis, and send it via Fast2SMS.
+ * If an OTP already exists in Redis for this phone number, it will reuse that OTP
+ * and resend it instead of generating a new one (prevents security issues).
  *
- * @param phoneNumber  E.164 formatted phone number (e.g. "+14155551234")
- * @param purpose      Determines the message copy
+ * @param phoneNumber  10-digit Indian number or E.164 (+91XXXXXXXXXX)
+ * @param purpose      Determines the message copy and OTP purpose
  * @param expiryMins   OTP TTL in Redis (default: 10 minutes)
+ * @param forceNew     Force generation of new OTP even if one exists (default: false)
  */
 export const sendOTPViaSMS = async (
   phoneNumber: string,
   purpose: "registration" | "login" | "verification" = "verification",
   expiryMins = 10,
-): Promise<{ success: boolean; otp?: string }> => {
+  forceNew = false,
+): Promise<{ success: boolean; otp?: string; isExisting?: boolean }> => {
   try {
-    const otp = generateOTP();
+    let otp: string;
+    let isExisting = false;
+    
+    // Check if OTP already exists in Redis
+    if (!forceNew) {
+      const existingOTPData = await getOTP(`phone:${phoneNumber}`);
+      
+      if (existingOTPData) {
+        // Reuse existing OTP
+        otp = existingOTPData.otp;
+        isExisting = true;
+        console.log(`[Fast2SMS] Reusing existing OTP for ${phoneNumber}`);
+      } else {
+        // Generate new OTP
+        otp = generateOTP();
+      }
+    } else {
+      // Force new OTP generation
+      otp = generateOTP();
+    }
+    
+    // Map purpose to Redis OTP purpose type
+    const redisPurpose = purpose === "verification" ? "registration" : purpose;
+    
+    // Store OTP in Redis (this will update/overwrite if forcing new)
+    // Key format: otp:phone:<phoneNumber>
+    await storeOTP(`phone:${phoneNumber}`, otp, expiryMins, redisPurpose);
 
-    // Store OTP in Redis BEFORE sending so we never deliver an OTP we can't verify
-    await storeOTP(phoneNumber, otp, expiryMins);
-
-    const messages: Record<typeof purpose, string> = {
-      registration: `Welcome to Sprint Shoes! Your registration OTP is ${otp}. Valid for ${expiryMins} min. Never share this code.`,
-      login: `Your Sprint Shoes login OTP is ${otp}. Valid for ${expiryMins} min. Never share this code.`,
-      verification: `Your Sprint Shoes verification code is ${otp}. Valid for ${expiryMins} min.`,
-    };
-
-    const sent = await sendSMS({ phoneNumber, message: messages[purpose] });
+    // Use dedicated OTP route for OTP messages (Fast2SMS OTP route only sends the digit value)
+    const sent = await sendOTPSMS({ phoneNumber, otp });
 
     return {
       success: sent,
       // Never expose raw OTP in production
       otp: IS_PRODUCTION ? undefined : otp,
+      isExisting,
     };
   } catch (error) {
-    console.error("[Twilio] sendOTPViaSMS error:", error);
+    console.error("[Fast2SMS] sendOTPViaSMS error:", error);
     return { success: false };
   }
 };
+
 
 // ─── Transactional SMS Notifications ─────────────────────────────────────────
 

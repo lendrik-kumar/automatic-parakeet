@@ -43,3 +43,34 @@ export const productAnalytics = async (_req: Request, res: Response) => {
     return handleError(res, err);
   }
 };
+
+export const customerAnalytics = async (_req: Request, res: Response) => {
+  try {
+    const data = await analyticsService.getCustomerAnalytics();
+    return res.json({ success: true, data });
+  } catch (err) {
+    return handleError(res, err);
+  }
+};
+
+export const revenueAnalytics = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+    const data = await analyticsService.getRevenueAnalytics({ startDate, endDate });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return handleError(res, err);
+  }
+};
+
+export const inventoryAnalytics = async (_req: Request, res: Response) => {
+  try {
+    const data = await analyticsService.getInventoryAnalytics();
+    return res.json({ success: true, data });
+  } catch (err) {
+    return handleError(res, err);
+  }
+};

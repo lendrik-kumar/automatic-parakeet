@@ -47,6 +47,12 @@ export const listCoupons = async (page = 1, limit = 20) => {
   };
 };
 
+export const getCoupon = async (couponId: string) => {
+  const coupon = await couponRepository.findById(couponId);
+  if (!coupon) throw new CouponError(404, "Coupon not found");
+  return coupon;
+};
+
 export const updateCoupon = async (
   adminId: string,
   couponId: string,
@@ -81,6 +87,25 @@ export const deleteCoupon = async (adminId: string, couponId: string) => {
 
   await couponRepository.delete(couponId);
   await adminRepository.logActivity(adminId, "DELETE", "Coupon", couponId);
+};
+
+export const updateCouponStatus = async (
+  adminId: string,
+  couponId: string,
+  status: CouponStatus,
+) => {
+  const existing = await couponRepository.findById(couponId);
+  if (!existing) throw new CouponError(404, "Coupon not found");
+
+  const coupon = await couponRepository.updateStatus(couponId, status);
+  await adminRepository.logActivity(adminId, "UPDATE", "Coupon", couponId);
+  return coupon;
+};
+
+export const getCouponUsageStats = async (couponId: string) => {
+  const stats = await couponRepository.usageStats(couponId);
+  if (!stats) throw new CouponError(404, "Coupon not found");
+  return stats;
 };
 
 /** POST /coupons/validate — client validates a coupon before checkout */

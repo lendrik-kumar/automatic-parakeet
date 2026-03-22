@@ -72,7 +72,10 @@ export const ModelName = {
     AdminSession: 'AdminSession',
     AdminActivityLog: 'AdminActivityLog',
     Coupon: 'Coupon',
+    Collection: 'Collection',
+    Category: 'Category',
     Cart: 'Cart',
+    SavedItem: 'SavedItem',
     CartItem: 'CartItem',
     Inventory: 'Inventory',
     Order: 'Order',
@@ -91,6 +94,8 @@ export const ModelName = {
     ProductReview: 'ProductReview',
     Shipment: 'Shipment',
     ShippingMethod: 'ShippingMethod',
+    TaxRule: 'TaxRule',
+    ShippingRule: 'ShippingRule',
     User: 'User',
     UserSession: 'UserSession',
     Address: 'Address',
@@ -161,14 +166,50 @@ export const CouponScalarFieldEnum = {
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
+export const CollectionScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    slug: 'slug',
+    description: 'description',
+    imageUrl: 'imageUrl',
+    displayOrder: 'displayOrder',
+    status: 'status',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+export const CategoryScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    slug: 'slug',
+    description: 'description',
+    imageUrl: 'imageUrl',
+    displayOrder: 'displayOrder',
+    parentId: 'parentId',
+    status: 'status',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
 export const CartScalarFieldEnum = {
     id: 'id',
     customerId: 'customerId',
     sessionId: 'sessionId',
+    appliedCouponId: 'appliedCouponId',
+    appliedDiscount: 'appliedDiscount',
     totalItems: 'totalItems',
     totalPrice: 'totalPrice',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
+};
+export const SavedItemScalarFieldEnum = {
+    id: 'id',
+    customerId: 'customerId',
+    productId: 'productId',
+    variantId: 'variantId',
+    size: 'size',
+    color: 'color',
+    quantity: 'quantity',
+    unitPrice: 'unitPrice',
+    savedAt: 'savedAt'
 };
 export const CartItemScalarFieldEnum = {
     id: 'id',
@@ -284,6 +325,8 @@ export const ProductScalarFieldEnum = {
     featuredProduct: 'featuredProduct',
     newArrival: 'newArrival',
     status: 'status',
+    collectionId: 'collectionId',
+    categoryId: 'categoryId',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
@@ -351,6 +394,10 @@ export const ProductReviewScalarFieldEnum = {
     reviewText: 'reviewText',
     images: 'images',
     verifiedPurchase: 'verifiedPurchase',
+    status: 'status',
+    moderatedBy: 'moderatedBy',
+    moderatedAt: 'moderatedAt',
+    moderationNote: 'moderationNote',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
@@ -375,14 +422,38 @@ export const ShippingMethodScalarFieldEnum = {
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
+export const TaxRuleScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    region: 'region',
+    taxRate: 'taxRate',
+    isActive: 'isActive',
+    priority: 'priority',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+export const ShippingRuleScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    region: 'region',
+    minimumOrder: 'minimumOrder',
+    maximumOrder: 'maximumOrder',
+    shippingCost: 'shippingCost',
+    isFreeShipping: 'isFreeShipping',
+    isActive: 'isActive',
+    priority: 'priority',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
 export const UserScalarFieldEnum = {
     id: 'id',
     firstName: 'firstName',
     lastName: 'lastName',
-    username: 'username',
     email: 'email',
     passwordHash: 'passwordHash',
     phoneNumber: 'phoneNumber',
+    gender: 'gender',
+    dateOfBirth: 'dateOfBirth',
     status: 'status',
     emailVerified: 'emailVerified',
     phoneVerified: 'phoneVerified',

@@ -13,9 +13,21 @@ export class InventoryError extends Error {
 }
 export const listInventory = async (page = 1, limit = 20) => {
     const skip = (page - 1) * limit;
-    const [items, total] = await inventoryRepository.findMany(skip, limit);
+    const [items, total] = await inventoryRepository.findManyWithFilters(skip, limit);
     return {
         inventory: items,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+};
+export const listInventoryAdvanced = async (page = 1, limit = 20, filters) => {
+    const skip = (page - 1) * limit;
+    const [items, total] = await inventoryRepository.findManyWithFilters(skip, limit, filters);
+    let inventory = items;
+    if (filters?.lowStock) {
+        inventory = items.filter((item) => item.availableStock <= item.reorderThreshold);
+    }
+    return {
+        inventory,
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
 };
@@ -35,4 +47,22 @@ export const updateInventory = async (adminId, variantId, data) => {
     await adminRepository.logActivity(adminId, "UPDATE", "Inventory", inv.id);
     // Re-fetch to return accurate available stock
     return inventoryRepository.findByVariantId(variantId);
+};
+export const bulkUpdateInventory = async (adminId, updates) => {
+    if (!updates.length)
+        throw new InventoryError(400, "Inventory updates are required");
+    const result = await inventoryRepository.bulkUpdateStock(updates);
+    await Promise.all(updates.map((item) => inventoryRepository.recalculateAvailable(item.variantId)));
+    await adminRepository.logActivity(adminId, "UPDATE", "Inventory", "bulk-update");
+    return result;
+};
+export const getInventoryAlerts = async (limit = 50) => {
+    const [lowStock, outOfStock] = await Promise.all([
+        inventoryRepository.findLowStock(limit),
+        inventoryRepository.findOutOfStock(limit),
+    ]);
+    return {
+        lowStock,
+        outOfStock,
+    };
 };

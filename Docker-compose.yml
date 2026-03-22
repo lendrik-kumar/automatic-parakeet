@@ -1,7 +1,6 @@
-version: "3.9"
 
 services:
-  # PostgreSQL Database
+  # ── PostgreSQL Database ────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: shoes_postgres
@@ -26,7 +25,7 @@ services:
     networks:
       - shoes_network
 
-  # Redis Cache
+  # ── Redis Cache ────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: shoes_redis
@@ -38,75 +37,13 @@ services:
     ports:
       - "${REDIS_PORT}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     networks:
       - shoes_network
-
-  # Application Server
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: shoes_app
-    restart: unless-stopped
-    env_file: .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      PORT: 3000
-    ports:
-      - "${APP_PORT}:3000"
-    volumes:
-      # Mount source code for development (optional)
-      - ./src:/app/src
-      - ./prisma:/app/prisma
-      # Exclude node_modules to use container's
-      - /app/node_modules
-    networks:
-      - shoes_network
-    # Run migrations and optionally seed on startup
-    command: >
-      sh -c "
-        echo '⏳ Waiting for database to be ready...' &&
-        sleep 3 &&
-        echo '🔄 Generating Prisma client...' &&
-        npx prisma generate &&
-        echo '🔄 Running Prisma migrations...' &&
-        npx prisma migrate deploy || echo '⚠️  Migration warning - continuing...' &&
-        if [ \"$$ENABLE_SEED\" = \"true\" ]; then
-          echo '🌱 Running seed script...' &&
-          npm run build-schema &&
-          npx tsx prisma/seed.ts || echo '⚠️  Seed warning - continuing...' &&
-          echo '✅ Migrations and seed completed!';
-        else
-          echo '⏭️  Seed skipped (ENABLE_SEED=false)';
-        fi &&
-        echo '🚀 Starting application...' &&
-        npm start
-      "
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
 volumes:
   postgres_data:

@@ -35,6 +35,9 @@ const createCouponSchema = z.object({
 const updateCouponSchema = createCouponSchema.partial().extend({
     status: z.enum(["ACTIVE", "INACTIVE", "EXPIRED"]).optional(),
 });
+const couponStatusSchema = z.object({
+    status: z.enum(["ACTIVE", "INACTIVE", "EXPIRED"]),
+});
 const validateCouponSchema = z.object({
     code: z.string().min(1),
     orderTotal: z.number().positive(),
@@ -63,6 +66,16 @@ export const listCoupons = async (req, res) => {
         handleError(res, e);
     }
 };
+/** GET /admin/coupons/:couponId */
+export const getCoupon = async (req, res) => {
+    try {
+        const coupon = await svc.getCoupon(req.params.couponId);
+        res.status(200).json({ success: true, data: { coupon } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
 /** PATCH /admin/coupons/:couponId */
 export const updateCoupon = async (req, res) => {
     try {
@@ -81,6 +94,29 @@ export const deleteCoupon = async (req, res) => {
     try {
         await svc.deleteCoupon(req.admin.id, req.params.couponId);
         res.status(200).json({ success: true, message: "Coupon deleted" });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** PATCH /admin/coupons/:couponId/status */
+export const updateCouponStatus = async (req, res) => {
+    try {
+        const { status } = couponStatusSchema.parse(req.body);
+        const coupon = await svc.updateCouponStatus(req.admin.id, req.params.couponId, status);
+        res
+            .status(200)
+            .json({ success: true, message: "Coupon status updated", data: { coupon } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /admin/coupons/:couponId/usage */
+export const getCouponUsageStats = async (req, res) => {
+    try {
+        const stats = await svc.getCouponUsageStats(req.params.couponId);
+        res.status(200).json({ success: true, data: { stats } });
     }
     catch (e) {
         handleError(res, e);

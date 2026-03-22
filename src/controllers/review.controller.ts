@@ -31,6 +31,20 @@ const createReviewSchema = z.object({
   images: z.array(z.string().url()).optional(),
 });
 
+const reviewStatusSchema = z.object({
+  status: z.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]).optional(),
+  search: z.string().optional(),
+});
+
+const moderationNoteSchema = z.object({
+  note: z.string().optional(),
+});
+
+const bulkReviewSchema = z.object({
+  reviewIds: z.array(z.string().uuid()).min(1),
+  note: z.string().optional(),
+});
+
 /** POST /products/:productId/reviews */
 export const createReview = async (
   req: Request,
@@ -76,6 +90,139 @@ export const adminDeleteReview = async (
   try {
     await svc.deleteReview(req.admin!.id, req.params.reviewId);
     res.status(200).json({ success: true, message: "Review deleted" });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** GET /admin/reviews */
+export const adminListReviews = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const filters = reviewStatusSchema.parse(req.query);
+    const result = await svc.listAdminReviews(
+      Number(req.query.page) || 1,
+      Number(req.query.limit) || 20,
+      filters.status,
+      filters.search,
+    );
+    res.status(200).json({ success: true, data: result });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** PATCH /admin/reviews/:reviewId/approve */
+export const adminApproveReview = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const review = await svc.approveReview(req.admin!.id, req.params.reviewId);
+    res
+      .status(200)
+      .json({ success: true, message: "Review approved", data: { review } });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** PATCH /admin/reviews/:reviewId/reject */
+export const adminRejectReview = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { note } = moderationNoteSchema.parse(req.body);
+    const review = await svc.rejectReview(req.admin!.id, req.params.reviewId, note);
+    res
+      .status(200)
+      .json({ success: true, message: "Review rejected", data: { review } });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** PATCH /admin/reviews/:reviewId/flag */
+export const adminFlagReview = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { note } = moderationNoteSchema.parse(req.body);
+    const review = await svc.flagReview(req.admin!.id, req.params.reviewId, note);
+    res
+      .status(200)
+      .json({ success: true, message: "Review flagged", data: { review } });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** POST /admin/reviews/bulk/approve */
+export const adminBulkApproveReviews = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { reviewIds } = bulkReviewSchema.parse(req.body);
+    const result = await svc.bulkApproveReviews(req.admin!.id, reviewIds);
+    res.status(200).json({
+      success: true,
+      message: "Reviews approved",
+      data: { updatedCount: result.count },
+    });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** POST /admin/reviews/bulk/reject */
+export const adminBulkRejectReviews = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { reviewIds, note } = bulkReviewSchema.parse(req.body);
+    const result = await svc.bulkRejectReviews(req.admin!.id, reviewIds, note);
+    res.status(200).json({
+      success: true,
+      message: "Reviews rejected",
+      data: { updatedCount: result.count },
+    });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** POST /admin/reviews/bulk/delete */
+export const adminBulkDeleteReviews = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { reviewIds } = bulkReviewSchema.parse(req.body);
+    const result = await svc.bulkDeleteReviews(req.admin!.id, reviewIds);
+    res.status(200).json({
+      success: true,
+      message: "Reviews deleted",
+      data: { deletedCount: result.count },
+    });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** GET /admin/reviews/stats */
+export const adminReviewStats = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const data = await svc.getReviewStats();
+    res.status(200).json({ success: true, data });
   } catch (e) {
     handleError(res, e);
   }

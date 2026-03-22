@@ -26,11 +26,13 @@ const handleError = (res, error) => {
 const createProductSchema = z.object({
     name: z.string().min(1),
     brand: z.string().min(1),
+    collectionId: z.string().uuid().optional(),
     description: z.string().optional(),
     shortDescription: z.string().optional(),
     gender: z.enum(["MEN", "WOMEN", "UNISEX", "KIDS"]),
     shoeType: z.string().min(1),
     category: z.string().min(1),
+    categoryId: z.string().uuid().optional(),
     basePrice: z.number().positive(),
     releaseDate: z.string().optional(),
     featuredProduct: z.boolean().optional(),
@@ -39,6 +41,26 @@ const createProductSchema = z.object({
 const updateProductSchema = createProductSchema.partial();
 const statusSchema = z.object({
     status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED", "DISCONTINUED"]),
+});
+const bulkStatusSchema = z.object({
+    productIds: z.array(z.string().uuid()).min(1),
+    status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED", "DISCONTINUED"]),
+});
+const bulkFeatureSchema = z.object({
+    productIds: z.array(z.string().uuid()).min(1),
+    featuredProduct: z.boolean(),
+});
+const bulkNewArrivalSchema = z.object({
+    productIds: z.array(z.string().uuid()).min(1),
+    newArrival: z.boolean(),
+});
+const bulkPriceSchema = z.object({
+    updates: z
+        .array(z.object({
+        productId: z.string().uuid(),
+        basePrice: z.number().positive(),
+    }))
+        .min(1),
 });
 const createVariantSchema = z.object({
     sku: z.string().min(1),
@@ -105,6 +127,18 @@ export const adminListProducts = async (req, res) => {
             search: req.query.search,
             category: req.query.category,
             brand: req.query.brand,
+            collectionId: req.query.collectionId,
+            categoryId: req.query.categoryId,
+            gender: req.query.gender,
+            shoeType: req.query.shoeType,
+            minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
+            maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
+            featuredProduct: req.query.featuredProduct !== undefined
+                ? req.query.featuredProduct === "true"
+                : undefined,
+            newArrival: req.query.newArrival !== undefined
+                ? req.query.newArrival === "true"
+                : undefined,
         });
         res.status(200).json({ success: true, data: result });
     }
@@ -153,6 +187,76 @@ export const adminUpdateProductStatus = async (req, res) => {
         res
             .status(200)
             .json({ success: true, message: "Status updated", data: { product } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** POST /admin/products/bulk/status */
+export const adminBulkUpdateProductStatus = async (req, res) => {
+    try {
+        const { productIds, status } = bulkStatusSchema.parse(req.body);
+        const result = await svc.bulkUpdateProductStatus(req.admin.id, productIds, status);
+        res.status(200).json({
+            success: true,
+            message: "Product statuses updated",
+            data: { updatedCount: result.count },
+        });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** POST /admin/products/bulk/feature */
+export const adminBulkToggleFeatured = async (req, res) => {
+    try {
+        const { productIds, featuredProduct } = bulkFeatureSchema.parse(req.body);
+        const result = await svc.bulkToggleFeaturedProducts(req.admin.id, productIds, featuredProduct);
+        res.status(200).json({
+            success: true,
+            message: "Featured products updated",
+            data: { updatedCount: result.count },
+        });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** POST /admin/products/bulk/new-arrival */
+export const adminBulkToggleNewArrival = async (req, res) => {
+    try {
+        const { productIds, newArrival } = bulkNewArrivalSchema.parse(req.body);
+        const result = await svc.bulkToggleNewArrivalProducts(req.admin.id, productIds, newArrival);
+        res.status(200).json({
+            success: true,
+            message: "New arrival products updated",
+            data: { updatedCount: result.count },
+        });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** POST /admin/products/bulk/prices */
+export const adminBulkUpdateProductPrices = async (req, res) => {
+    try {
+        const { updates } = bulkPriceSchema.parse(req.body);
+        const result = await svc.bulkUpdateProductPrices(req.admin.id, updates);
+        res.status(200).json({
+            success: true,
+            message: "Product prices updated",
+            data: { updatedCount: result.length },
+        });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /admin/products/analytics */
+export const adminProductAnalytics = async (req, res) => {
+    try {
+        const data = await svc.getAdminProductAnalytics();
+        res.status(200).json({ success: true, data });
     }
     catch (e) {
         handleError(res, e);
@@ -275,12 +379,17 @@ export const clientListProducts = async (req, res) => {
             page: Number(req.query.page) || undefined,
             limit: Number(req.query.limit) || undefined,
             category: req.query.category,
-            brand: req.query.brand,
+            collection: req.query.collection,
+            subCategory: req.query.subCategory,
             gender: req.query.gender,
+            shoeType: req.query.shoeType,
             minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
             maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
             size: req.query.size,
             color: req.query.color,
+            search: req.query.search,
+            sortBy: req.query.sortBy,
+            order: req.query.order,
         });
         res.status(200).json({ success: true, data: result });
     }
@@ -312,6 +421,172 @@ export const clientNewArrivals = async (req, res) => {
 export const clientSearchProducts = async (req, res) => {
     try {
         const result = await svc.searchProducts(req.query.q, Number(req.query.page) || 1, Number(req.query.limit) || 20);
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/best-sellers */
+export const clientBestSellers = async (req, res) => {
+    try {
+        const result = await svc.getBestSellers(Number(req.query.page) || 1, Number(req.query.limit) || 20);
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/trending */
+export const clientTrendingProducts = async (req, res) => {
+    try {
+        const result = await svc.getTrendingProducts(Number(req.query.page) || 1, Number(req.query.limit) || 20);
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/filters */
+export const clientGetFilterOptions = async (_req, res) => {
+    try {
+        const result = await svc.getFilterOptions();
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/categories */
+export const clientGetAllCategories = async (_req, res) => {
+    try {
+        const categories = await svc.getAllCategories();
+        res.status(200).json({ success: true, data: { categories } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/categories/:category */
+export const clientGetProductsByCategory = async (req, res) => {
+    try {
+        const result = await svc.getProductsByCategory(req.params.category, {
+            page: Number(req.query.page) || 1,
+            limit: Number(req.query.limit) || 20,
+            collection: req.query.collection,
+            gender: req.query.gender,
+            shoeType: req.query.shoeType,
+            minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
+            maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
+            size: req.query.size,
+            color: req.query.color,
+            sortBy: req.query.sortBy,
+            order: req.query.order,
+        });
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/categories/:category/:subCategory */
+export const clientGetSubCategoryProducts = async (req, res) => {
+    try {
+        const result = await svc.getSubCategoryProducts(req.params.category, req.params.subCategory, {
+            page: Number(req.query.page) || 1,
+            limit: Number(req.query.limit) || 20,
+            collection: req.query.collection,
+            gender: req.query.gender,
+            minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
+            maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
+            size: req.query.size,
+            color: req.query.color,
+            sortBy: req.query.sortBy,
+            order: req.query.order,
+        });
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/collections */
+export const clientGetCollections = async (_req, res) => {
+    try {
+        const collections = await svc.getCollections();
+        res.status(200).json({ success: true, data: { collections } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/collections/:collection */
+export const clientGetProductsByCollection = async (req, res) => {
+    try {
+        const result = await svc.getProductsByCollection(req.params.collection, {
+            page: Number(req.query.page) || 1,
+            limit: Number(req.query.limit) || 20,
+            category: req.query.category,
+            subCategory: req.query.subCategory,
+            gender: req.query.gender,
+            shoeType: req.query.shoeType,
+            minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
+            maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
+            size: req.query.size,
+            color: req.query.color,
+            sortBy: req.query.sortBy,
+            order: req.query.order,
+        });
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/:productId/variants */
+export const clientGetVariants = async (req, res) => {
+    try {
+        const variants = await svc.getProductVariants(req.params.productId);
+        res.status(200).json({ success: true, data: { variants } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/variant/:variantId */
+export const clientGetVariantDetails = async (req, res) => {
+    try {
+        const variant = await svc.getVariantDetails(req.params.variantId);
+        res.status(200).json({ success: true, data: { variant } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/:productId/related */
+export const clientRelatedProducts = async (req, res) => {
+    try {
+        const result = await svc.getRelatedProducts(req.params.productId, Number(req.query.limit) || 8);
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/:productId/similar */
+export const clientSimilarProducts = async (req, res) => {
+    try {
+        const result = await svc.getSimilarProducts(req.params.productId, Number(req.query.limit) || 8);
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** GET /products/recommendations/personalized */
+export const clientPersonalizedProducts = async (req, res) => {
+    try {
+        const result = await svc.getPersonalizedProducts(req.user.id, Number(req.query.limit) || 20);
         res.status(200).json({ success: true, data: result });
     }
     catch (e) {

@@ -62,4 +62,7 @@ export const wishlistRepository = {
     }),
 
   deleteItem: (id: string) => prisma.wishlistItem.delete({ where: { id } }),
+
+  clearAllItems: (wishlistId: string) =>
+    prisma.wishlistItem.deleteMany({ where: { wishlistId } }),
 };

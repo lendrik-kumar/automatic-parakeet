@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
@@ -5,7 +6,13 @@ import pg from "pg";
 
 // ─── Database Connection ──────────────────────────────────────────────────────
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
+
+const pool = new pg.Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
@@ -17,7 +24,7 @@ const rand = (min: number, max: number) =>
 const randFloat = (min: number, max: number, decimals = 2) =>
   parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 
-const pick = <T>(arr: T[]): T => arr[rand(0, arr.length - 1)];
+const pick = <T>(arr: readonly T[]): T => arr[rand(0, arr.length - 1)];
 
 const nextImg = (() => {
   let c = 0;
@@ -633,19 +640,24 @@ async function main() {
   // ============================================
   console.log("👥 Creating users...");
   const users = [];
+  const userGenders = ["MEN", "WOMEN", "UNISEX"] as const;
 
   for (let i = 0; i < 30; i++) {
     const fn = firstNames[i % firstNames.length];
     const ln = lastNames[i % lastNames.length];
+    const dateOfBirth = new Date(
+      Date.UTC(rand(1970, 2005), rand(0, 11), rand(1, 28)),
+    );
 
     const user = await prisma.user.create({
       data: {
         firstName: fn,
         lastName: ln,
-        username: `${fn.toLowerCase()}${ln.toLowerCase()}${i + 1}`,
         email: `${fn.toLowerCase()}.${ln.toLowerCase()}${i + 1}@example.com`,
         passwordHash: hashed,
         phoneNumber: `+1${rand(2000000000, 9999999999)}`,
+        gender: pick(userGenders),
+        dateOfBirth,
         status: i < 28 ? "ACTIVE" : i === 28 ? "SUSPENDED" : "DELETED",
         emailVerified: i < 25,
         phoneVerified: i < 20,

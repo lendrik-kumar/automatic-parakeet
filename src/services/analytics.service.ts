@@ -132,3 +132,105 @@ export const getProductAnalytics = async () => {
     })),
   };
 };
+
+export const getCustomerAnalytics = async () => {
+  const [totalCustomers, activeCustomers, topCustomersBySpend] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { status: "ACTIVE" } }),
+    prisma.order.groupBy({
+      by: ["customerId"],
+      where: { paymentStatus: "COMPLETED" },
+      _sum: { totalAmount: true },
+      _count: true,
+      orderBy: { _sum: { totalAmount: "desc" } },
+      take: 10,
+    }),
+  ]);
+
+  const customerIds = topCustomersBySpend.map((c) => c.customerId);
+  const customers = await prisma.user.findMany({
+    where: { id: { in: customerIds } },
+    select: { id: true, firstName: true, lastName: true, email: true, createdAt: true },
+  });
+  const customerMap = new Map(customers.map((c) => [c.id, c]));
+
+  return {
+    totalCustomers,
+    activeCustomers,
+    inactiveCustomers: totalCustomers - activeCustomers,
+    topCustomers: topCustomersBySpend.map((c) => ({
+      customer: customerMap.get(c.customerId),
+      totalSpent: c._sum.totalAmount || 0,
+      totalOrders: c._count,
+    })),
+  };
+};
+
+export const getRevenueAnalytics = async (query: {
+  startDate?: string;
+  endDate?: string;
+}) => {
+  const endDate = query.endDate ? new Date(query.endDate) : new Date();
+  const startDate = query.startDate
+    ? new Date(query.startDate)
+    : new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [categoryRevenue, collectionRevenue, topProducts] = await Promise.all([
+    prisma.orderItem.groupBy({
+      by: ["productId"],
+      where: {
+        order: {
+          placedAt: { gte: startDate, lte: endDate },
+          paymentStatus: "COMPLETED",
+        },
+      },
+      _sum: { total: true },
+      _count: true,
+    }),
+    prisma.product.groupBy({
+      by: ["brand"],
+      _count: true,
+    }),
+    prisma.orderItem.groupBy({
+      by: ["productId"],
+      where: {
+        order: {
+          placedAt: { gte: startDate, lte: endDate },
+          paymentStatus: "COMPLETED",
+        },
+      },
+      _sum: { total: true, quantity: true },
+      orderBy: { _sum: { total: "desc" } },
+      take: 10,
+    }),
+  ]);
+
+  return {
+    period: { startDate, endDate },
+    revenueByProductCount: categoryRevenue.length,
+    collectionBreakdown: collectionRevenue,
+    topProducts,
+  };
+};
+
+export const getInventoryAnalytics = async () => {
+  const [totalVariants, lowStockItems, outOfStockItems, stockValue] =
+    await Promise.all([
+      prisma.inventory.count(),
+      inventoryRepository.findLowStock(50),
+      inventoryRepository.findOutOfStock(50),
+      prisma.inventory.aggregate({
+        _sum: { stockQuantity: true, availableStock: true },
+      }),
+    ]);
+
+  return {
+    totalVariants,
+    lowStockCount: (lowStockItems as unknown[]).length,
+    outOfStockCount: (outOfStockItems as unknown[]).length,
+    totalStockQuantity: stockValue._sum.stockQuantity || 0,
+    totalAvailableStock: stockValue._sum.availableStock || 0,
+    lowStockItems,
+    outOfStockItems,
+  };
+};

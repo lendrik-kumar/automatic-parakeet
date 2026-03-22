@@ -35,10 +35,87 @@ export const refundRepository = {
       prisma.refund.count({ where: where as never }),
     ]),
 
+  findManyAdvanced: (
+    skip: number,
+    take: number,
+    filters?: {
+      status?: RefundStatus;
+      search?: string;
+      startDate?: Date;
+      endDate?: Date;
+    },
+  ) => {
+    const where: Record<string, unknown> = {};
+    if (filters?.status) where.refundStatus = filters.status;
+    if (filters?.startDate || filters?.endDate) {
+      where.createdAt = {};
+      if (filters.startDate)
+        (where.createdAt as Record<string, unknown>).gte = filters.startDate;
+      if (filters.endDate)
+        (where.createdAt as Record<string, unknown>).lte = filters.endDate;
+    }
+    if (filters?.search) {
+      where.OR = [
+        {
+          refundReason: { contains: filters.search, mode: "insensitive" },
+        },
+        { order: { orderNumber: { contains: filters.search, mode: "insensitive" } } },
+        {
+          payment: {
+            transactionId: { contains: filters.search, mode: "insensitive" },
+          },
+        },
+      ];
+    }
+
+    return Promise.all([
+      prisma.refund.findMany({
+        where: where as never,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+        include: {
+          payment: {
+            select: {
+              id: true,
+              transactionId: true,
+              paymentMethod: true,
+              paymentStatus: true,
+            },
+          },
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              customer: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.refund.count({ where: where as never }),
+    ]);
+  },
+
   updateStatus: (
     id: string,
     refundStatus: RefundStatus,
     extra?: { processedAt?: Date },
   ) =>
     prisma.refund.update({ where: { id }, data: { refundStatus, ...extra } }),
+
+  bulkUpdateStatus: (refundIds: string[], refundStatus: RefundStatus) =>
+    prisma.refund.updateMany({
+      where: { id: { in: refundIds } },
+      data: {
+        refundStatus,
+        processedAt: refundStatus === "COMPLETED" ? new Date() : undefined,
+      },
+    }),
 };

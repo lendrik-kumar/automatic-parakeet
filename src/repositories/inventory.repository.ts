@@ -44,6 +44,54 @@ export const inventoryRepository = {
       prisma.inventory.count(),
     ]),
 
+  findManyWithFilters: (
+    skip: number,
+    take: number,
+    filters?: {
+      lowStock?: boolean;
+      outOfStock?: boolean;
+      search?: string;
+    },
+  ) => {
+    const where: Record<string, unknown> = {};
+
+    if (filters?.outOfStock) {
+      where.availableStock = { lte: 0 };
+    }
+
+    if (filters?.search) {
+      where.OR = [
+        {
+          variant: {
+            sku: { contains: filters.search, mode: "insensitive" },
+          },
+        },
+        {
+          variant: {
+            product: { name: { contains: filters.search, mode: "insensitive" } },
+          },
+        },
+      ];
+    }
+
+    return Promise.all([
+      prisma.inventory.findMany({
+        where: where as never,
+        skip,
+        take,
+        orderBy: { lastUpdated: "desc" },
+        include: {
+          variant: {
+            include: {
+              product: { select: { id: true, name: true, slug: true } },
+            },
+          },
+        },
+      }),
+      prisma.inventory.count({ where: where as never }),
+    ]);
+  },
+
   updateStock: (
     variantId: string,
     data: { stockQuantity?: number; reorderThreshold?: number },
@@ -114,4 +162,36 @@ export const inventoryRepository = {
       ORDER BY i."availableStock" ASC
       LIMIT ${limit}
     `,
+
+  findOutOfStock: (limit = 50) =>
+    prisma.$queryRaw`
+      SELECT i.*, pv."sku", pv."size", pv."color", p."name" as "productName"
+      FROM "Inventory" i
+      JOIN "ProductVariant" pv ON pv."id" = i."variantId"
+      JOIN "Product" p ON p."id" = pv."productId"
+      WHERE i."availableStock" <= 0
+      ORDER BY i."lastUpdated" DESC
+      LIMIT ${limit}
+    `,
+
+  bulkUpdateStock: (
+    updates: {
+      variantId: string;
+      stockQuantity?: number;
+      reorderThreshold?: number;
+    }[],
+  ) =>
+    prisma.$transaction(
+      updates.map((item) => {
+        const data: Record<string, unknown> = {};
+        if (item.stockQuantity !== undefined) data.stockQuantity = item.stockQuantity;
+        if (item.reorderThreshold !== undefined) {
+          data.reorderThreshold = item.reorderThreshold;
+        }
+        return prisma.inventory.update({
+          where: { variantId: item.variantId },
+          data,
+        });
+      }),
+    ),
 };

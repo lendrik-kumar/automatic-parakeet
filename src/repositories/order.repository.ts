@@ -1,5 +1,9 @@
 import prisma from "../lib/prisma.js";
-import type { OrderStatus, PaymentStatus } from "../generated/prisma/enums.js";
+import type {
+  FulfillmentStatus,
+  OrderStatus,
+  PaymentStatus,
+} from "../generated/prisma/enums.js";
 
 export const orderRepository = {
   create: (data: {
@@ -93,6 +97,146 @@ export const orderRepository = {
         },
       }),
       prisma.order.count({ where: params.where as never }),
+    ]),
+
+  findManyAdvanced: (params: {
+    skip: number;
+    take: number;
+    status?: OrderStatus;
+    paymentStatus?: PaymentStatus;
+    fulfillmentStatus?: FulfillmentStatus;
+    startDate?: Date;
+    endDate?: Date;
+    customerId?: string;
+    productId?: string;
+    search?: string;
+  }) => {
+    const where: Record<string, unknown> = {};
+
+    if (params.status) where.orderStatus = params.status;
+    if (params.paymentStatus) where.paymentStatus = params.paymentStatus;
+    if (params.fulfillmentStatus)
+      where.fulfillmentStatus = params.fulfillmentStatus;
+    if (params.customerId) where.customerId = params.customerId;
+    if (params.productId) {
+      where.items = { some: { productId: params.productId } };
+    }
+    if (params.startDate || params.endDate) {
+      where.placedAt = {};
+      if (params.startDate)
+        (where.placedAt as Record<string, unknown>).gte = params.startDate;
+      if (params.endDate)
+        (where.placedAt as Record<string, unknown>).lte = params.endDate;
+    }
+    if (params.search) {
+      where.OR = [
+        {
+          orderNumber: { contains: params.search, mode: "insensitive" },
+        },
+        {
+          customer: { email: { contains: params.search, mode: "insensitive" } },
+        },
+        {
+          customer: {
+            firstName: { contains: params.search, mode: "insensitive" },
+          },
+        },
+        {
+          customer: {
+            lastName: { contains: params.search, mode: "insensitive" },
+          },
+        },
+      ];
+    }
+
+    return Promise.all([
+      prisma.order.findMany({
+        where: where as never,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { placedAt: "desc" },
+        include: {
+          customer: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
+          items: {
+            select: {
+              id: true,
+              productId: true,
+              productNameSnapshot: true,
+              quantity: true,
+              total: true,
+            },
+          },
+          payments: { select: { paymentStatus: true, amount: true } },
+          shipments: { select: { shippingStatus: true } },
+        },
+      }),
+      prisma.order.count({ where: where as never }),
+    ]);
+  },
+
+  bulkUpdateStatus: (orderIds: string[], orderStatus: OrderStatus) =>
+    prisma.order.updateMany({
+      where: { id: { in: orderIds } },
+      data: { orderStatus },
+    }),
+
+  searchMany: (query: string, skip: number, take: number) =>
+    Promise.all([
+      prisma.order.findMany({
+        where: {
+          OR: [
+            { orderNumber: { contains: query, mode: "insensitive" } },
+            { customer: { email: { contains: query, mode: "insensitive" } } },
+            {
+              customer: {
+                firstName: { contains: query, mode: "insensitive" },
+              },
+            },
+            {
+              customer: {
+                lastName: { contains: query, mode: "insensitive" },
+              },
+            },
+          ],
+        },
+        skip,
+        take,
+        orderBy: { placedAt: "desc" },
+        include: {
+          customer: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
+          items: {
+            select: {
+              id: true,
+              productNameSnapshot: true,
+              quantity: true,
+              total: true,
+            },
+          },
+          payments: { select: { paymentStatus: true, amount: true } },
+        },
+      }),
+      prisma.order.count({
+        where: {
+          OR: [
+            { orderNumber: { contains: query, mode: "insensitive" } },
+            { customer: { email: { contains: query, mode: "insensitive" } } },
+            {
+              customer: {
+                firstName: { contains: query, mode: "insensitive" },
+              },
+            },
+            {
+              customer: {
+                lastName: { contains: query, mode: "insensitive" },
+              },
+            },
+          ],
+        },
+      }),
     ]),
 
   updateStatus: (id: string, orderStatus: OrderStatus) =>

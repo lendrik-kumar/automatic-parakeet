@@ -1,15 +1,23 @@
-import sgMail from "@sendgrid/mail";
+import { Resend } from "resend";
 
-// ─── SendGrid Configuration ─────────────────────────────────────────────────────
+// ─── Resend Configuration ──────────────────────────────────────────────────────
 
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM ?? "noreply@sprintshoes.com";
 const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 const IS_PRODUCTION = process.env.NODE_ENV?.toUpperCase() === "PRODUCTION";
 
-if (SENDGRID_API_KEY) {
-  sgMail.setApiKey(SENDGRID_API_KEY);
-}
+// Lazily initialised — avoids crashing on startup without credentials in dev
+let _resend: Resend | null = null;
+const getResend = (): Resend => {
+  if (!_resend) {
+    if (!RESEND_API_KEY) {
+      throw new Error("RESEND_API_KEY env var is not set.");
+    }
+    _resend = new Resend(RESEND_API_KEY);
+  }
+  return _resend;
+};
 
 // ─── Core Interface ────────────────────────────────────────────────────────
 
@@ -23,7 +31,7 @@ interface EmailOptions {
 // ─── Base Send Function ───────────────────────────────────────────────────
 
 /**
- * Low-level email sender via SendGrid.
+ * Low-level email sender via Resend.
  * Falls back to a console log in non-production environments so the
  * server starts without real credentials during development / testing.
  */
@@ -31,28 +39,29 @@ export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
   try {
     if (!IS_PRODUCTION) {
       console.log("━".repeat(55));
-      console.log("✉️  SENDGRID EMAIL (dev mode — not actually sent)");
+      console.log("✉️  RESEND EMAIL (dev mode — not actually sent)");
       console.log(`  To     : ${options.to}`);
       console.log(`  Subject: ${options.subject}`);
       console.log("━".repeat(55));
       return true;
     }
 
-    if (!SENDGRID_API_KEY) {
-      throw new Error("SENDGRID_API_KEY env var is not set.");
-    }
-
-    await sgMail.send({
-      to: options.to,
+    const resend = getResend();
+    const { error } = await resend.emails.send({
       from: EMAIL_FROM,
+      to: options.to,
       subject: options.subject,
       text: options.text ?? "",
       html: options.html,
     });
 
+    if (error) {
+      throw new Error(`Resend error: ${error.message}`);
+    }
+
     return true;
   } catch (error) {
-    console.error("[SendGrid] Failed to send email:", error);
+    console.error("[Resend] Failed to send email:", error);
     return false;
   }
 };
@@ -146,28 +155,24 @@ export const sendOTPEmail = async (
     `),
   });
 
-/** Password reset link. */
+/** Password reset OTP. */
 export const sendPasswordResetEmail = async (
   email: string,
-  resetToken: string,
+  otp: string,
   firstName: string,
-): Promise<boolean> => {
-  const url = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(resetToken)}`;
-  return sendEmail({
+): Promise<boolean> =>
+  sendEmail({
     to: email,
-    subject: "Reset Your Password — Sprint Shoes",
-    text: `Hi ${firstName}, reset your password: ${url} (expires in 1 h)`,
+    subject: "Password Reset OTP — Sprint Shoes",
+    text: `Hi ${firstName}, use OTP ${otp} to reset your password. It expires in 10 minutes.`,
     html: layout(`
       <h2>Password Reset Request</h2>
       <p>Hi ${firstName},</p>
-      <p>Click the button below to set a new password:</p>
-      <a href="${url}" class="btn">Reset Password</a>
-      <p>Or paste this URL into your browser:</p>
-      <p style="word-break:break-all">${url}</p>
-      <div class="warn"><strong>Security:</strong> This link expires in <strong>1 hour</strong>. If you didn't request a reset, you can safely ignore this email.</div>
+      <p>Use the OTP below to reset your Sprint Shoes account password:</p>
+      <div class="otp">${otp}</div>
+      <div class="warn"><strong>Security:</strong> This OTP expires in <strong>10 minutes</strong>. If you didn't request a reset, you can safely ignore this email.</div>
     `),
   });
-};
 
 /** Security notification: new login detected. */
 export const sendLoginNotification = async (

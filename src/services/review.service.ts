@@ -1,5 +1,6 @@
 import { reviewRepository } from "../repositories/review.repository.js";
 import { adminRepository } from "../repositories/admin.repository.js";
+import type { ReviewStatus } from "../generated/prisma/enums.js";
 
 export class ReviewError extends Error {
   constructor(
@@ -38,6 +39,7 @@ export const createReview = async (
     reviewText: data.reviewText,
     images: data.images ? JSON.stringify(data.images) : undefined,
     verifiedPurchase: !!purchased,
+    status: "PENDING",
   });
 
   return review;
@@ -81,4 +83,135 @@ export const deleteReview = async (adminId: string, reviewId: string) => {
     "ProductReview",
     reviewId,
   );
+};
+
+export const listAdminReviews = async (
+  page = 1,
+  limit = 20,
+  status?: ReviewStatus,
+  search?: string,
+) => {
+  const skip = (page - 1) * limit;
+  const [reviews, total] = await reviewRepository.findManyByStatus(
+    skip,
+    limit,
+    status,
+    search,
+  );
+
+  return {
+    reviews,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
+};
+
+export const approveReview = async (adminId: string, reviewId: string) => {
+  const review = await reviewRepository.findById(reviewId);
+  if (!review) throw new ReviewError(404, "Review not found");
+
+  const updated = await reviewRepository.updateStatus(
+    reviewId,
+    "APPROVED",
+    adminId,
+  );
+  await adminRepository.logActivity(adminId, "UPDATE", "ProductReview", reviewId);
+  return updated;
+};
+
+export const rejectReview = async (
+  adminId: string,
+  reviewId: string,
+  note?: string,
+) => {
+  const review = await reviewRepository.findById(reviewId);
+  if (!review) throw new ReviewError(404, "Review not found");
+
+  const updated = await reviewRepository.updateStatus(
+    reviewId,
+    "REJECTED",
+    adminId,
+    note,
+  );
+  await adminRepository.logActivity(adminId, "UPDATE", "ProductReview", reviewId);
+  return updated;
+};
+
+export const flagReview = async (
+  adminId: string,
+  reviewId: string,
+  note?: string,
+) => {
+  const review = await reviewRepository.findById(reviewId);
+  if (!review) throw new ReviewError(404, "Review not found");
+
+  const updated = await reviewRepository.updateStatus(
+    reviewId,
+    "FLAGGED",
+    adminId,
+    note,
+  );
+  await adminRepository.logActivity(adminId, "UPDATE", "ProductReview", reviewId);
+  return updated;
+};
+
+export const bulkApproveReviews = async (adminId: string, reviewIds: string[]) => {
+  if (!reviewIds.length) throw new ReviewError(400, "Review IDs are required");
+
+  const result = await reviewRepository.bulkUpdateStatus(
+    reviewIds,
+    "APPROVED",
+    adminId,
+  );
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "ProductReview",
+    "bulk-approve",
+  );
+  return result;
+};
+
+export const bulkRejectReviews = async (
+  adminId: string,
+  reviewIds: string[],
+  note?: string,
+) => {
+  if (!reviewIds.length) throw new ReviewError(400, "Review IDs are required");
+
+  const result = await reviewRepository.bulkUpdateStatus(
+    reviewIds,
+    "REJECTED",
+    adminId,
+    note,
+  );
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "ProductReview",
+    "bulk-reject",
+  );
+  return result;
+};
+
+export const bulkDeleteReviews = async (adminId: string, reviewIds: string[]) => {
+  if (!reviewIds.length) throw new ReviewError(400, "Review IDs are required");
+
+  const result = await reviewRepository.bulkDelete(reviewIds);
+  await adminRepository.logActivity(
+    adminId,
+    "DELETE",
+    "ProductReview",
+    "bulk-delete",
+  );
+  return result;
+};
+
+export const getReviewStats = async () => {
+  const stats = await reviewRepository.countByStatus();
+  return {
+    byStatus: stats.map((item) => ({
+      status: item.status,
+      count: item._count,
+    })),
+  };
 };

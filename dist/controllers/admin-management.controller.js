@@ -92,3 +92,23 @@ export const updateAdminStatus = async (req, res) => {
         handleError(res, e);
     }
 };
+/** GET /admin/admins/:adminId */
+export const getAdmin = async (req, res) => {
+    try {
+        const admin = await svc.getAdmin(req.params.adminId);
+        res.status(200).json({ success: true, data: { admin } });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};
+/** DELETE /admin/admins/:adminId */
+export const deleteAdmin = async (req, res) => {
+    try {
+        await svc.deleteAdmin(req.admin.id, req.params.adminId);
+        res.status(200).json({ success: true, message: "Admin deleted" });
+    }
+    catch (e) {
+        handleError(res, e);
+    }
+};

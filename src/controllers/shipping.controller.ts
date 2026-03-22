@@ -34,6 +34,7 @@ const createMethodSchema = z.object({
 const updateMethodSchema = createMethodSchema.partial();
 
 const createShipmentSchema = z.object({
+  orderId: z.string().uuid(),
   courierName: z.string().min(1),
   trackingNumber: z.string().optional(),
   shippingMethod: z.string().min(1),
@@ -93,7 +94,11 @@ export const updateMethod = async (
 ): Promise<void> => {
   try {
     const data = updateMethodSchema.parse(req.body);
-    const method = await svc.updateMethod(req.admin!.id, req.params.id, data);
+    const method = await svc.updateMethod(
+      req.admin!.id,
+      req.params.methodId,
+      data,
+    );
     res
       .status(200)
       .json({
@@ -112,7 +117,7 @@ export const deleteMethod = async (
   res: Response,
 ): Promise<void> => {
   try {
-    await svc.deleteMethod(req.admin!.id, req.params.id);
+    await svc.deleteMethod(req.admin!.id, req.params.methodId);
     res.status(200).json({ success: true, message: "Shipping method deleted" });
   } catch (e) {
     handleError(res, e);
@@ -130,8 +135,12 @@ export const createShipment = async (
     const data = createShipmentSchema.parse(req.body);
     const shipment = await svc.createShipment(
       req.admin!.id,
-      req.params.orderId,
-      data,
+      data.orderId,
+      {
+        courierName: data.courierName,
+        trackingNumber: data.trackingNumber,
+        shippingMethod: data.shippingMethod,
+      },
     );
     res
       .status(201)
@@ -160,6 +169,36 @@ export const updateShipmentStatus = async (
         message: "Shipment status updated",
         data: { shipment },
       });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** GET /admin/shipping/shipments */
+export const listShipments = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const result = await svc.listShipments(
+      Number(req.query.page) || 1,
+      Number(req.query.limit) || 20,
+      req.query.search as string,
+    );
+    res.status(200).json({ success: true, data: result });
+  } catch (e) {
+    handleError(res, e);
+  }
+};
+
+/** GET /admin/shipping/shipments/:shipmentId */
+export const getShipment = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const shipment = await svc.getShipment(req.params.shipmentId);
+    res.status(200).json({ success: true, data: { shipment } });
   } catch (e) {
     handleError(res, e);
   }

@@ -11,6 +11,10 @@ export class ShippingError extends Error {
 }
 // ── Shipping Methods ──────────────────────────────────────────────────────────
 export const createMethod = async (adminId, data) => {
+    const existing = await shippingRepository.findAllMethods();
+    if (existing.some((method) => method.name === data.name)) {
+        throw new ShippingError(409, "Shipping method with this name already exists");
+    }
     const method = await shippingRepository.createMethod(data);
     await adminRepository.logActivity(adminId, "CREATE", "ShippingMethod", method.id);
     return method;
@@ -62,4 +66,18 @@ export const updateShipmentStatus = async (adminId, shipmentId, status) => {
     const updated = await shippingRepository.updateShipmentStatus(shipmentId, status, extra);
     await adminRepository.logActivity(adminId, "UPDATE", "Shipment", shipmentId);
     return updated;
+};
+export const listShipments = async (page = 1, limit = 20, search) => {
+    const skip = (page - 1) * limit;
+    const [shipments, total] = await shippingRepository.findShipments(skip, limit, search);
+    return {
+        shipments,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+};
+export const getShipment = async (shipmentId) => {
+    const shipment = await shippingRepository.findShipmentById(shipmentId);
+    if (!shipment)
+        throw new ShippingError(404, "Shipment not found");
+    return shipment;
 };

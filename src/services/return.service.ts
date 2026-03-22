@@ -78,16 +78,27 @@ export const listAdminReturns = async (
   page = 1,
   limit = 20,
   status?: ReturnStatus,
+  search?: string,
+  startDate?: string,
+  endDate?: string,
 ) => {
   const skip = (page - 1) * limit;
-  const where: Record<string, unknown> = {};
-  if (status) where.returnStatus = status;
-
-  const [returns, total] = await returnRepository.findMany(skip, limit, where);
+  const [returns, total] = await returnRepository.findManyAdvanced(skip, limit, {
+    status,
+    search,
+    startDate: startDate ? new Date(startDate) : undefined,
+    endDate: endDate ? new Date(endDate) : undefined,
+  });
   return {
     returns,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
+};
+
+export const getAdminReturn = async (returnId: string) => {
+  const returnReq = await returnRepository.findById(returnId);
+  if (!returnReq) throw new ReturnError(404, "Return request not found");
+  return returnReq;
 };
 
 /** PATCH /admin/returns/:returnId */
@@ -122,4 +133,17 @@ export const updateReturnStatus = async (
     returnId,
   );
   return updated;
+};
+
+export const bulkApproveReturns = async (adminId: string, returnIds: string[]) => {
+  if (!returnIds.length) throw new ReturnError(400, "Return IDs are required");
+
+  const result = await returnRepository.bulkUpdateStatus(returnIds, "APPROVED");
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "ReturnRequest",
+    "bulk-approve",
+  );
+  return result;
 };

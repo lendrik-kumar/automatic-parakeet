@@ -3,9 +3,9 @@ import {
   initiatePhoneRegistration,
   resendPhoneRegistrationOTP,
   verifyPhoneOTP,
-  initiateEmailVerification,
-  verifyEmailToken,
-  resendEmailVerification,
+  initiateEmailVerificationOTP,
+  verifyEmailOTPHandler,
+  resendEmailOTPHandler,
   completeRegistration,
   requestLoginOTP,
   resendLoginOTP,
@@ -17,7 +17,6 @@ import {
   listSessions,
   revokeSession,
   forgotPassword,
-  validatePasswordResetToken,
   resetPassword,
   getCurrentUser,
   updateUserProfile,
@@ -44,16 +43,20 @@ userRouter.post(
 );
 userRouter.post("/auth/register/verify-phone", otpLimiter, verifyPhoneOTP);
 userRouter.post(
-  "/auth/register/initiate-email",
+  "/auth/register/initiate-email-otp",
   otpLimiter,
-  initiateEmailVerification,
+  initiateEmailVerificationOTP,
 );
 userRouter.post(
-  "/auth/register/resend-email",
+  "/auth/register/verify-email-otp",
   otpLimiter,
-  resendEmailVerification,
+  verifyEmailOTPHandler,
 );
-userRouter.get("/auth/register/verify-email", verifyEmailToken); // token via query param
+userRouter.post(
+  "/auth/register/resend-email-otp",
+  otpLimiter,
+  resendEmailOTPHandler,
+);
 userRouter.post("/auth/register/complete", authLimiter, completeRegistration);
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -71,7 +74,6 @@ userRouter.delete("/auth/sessions/:sessionId", authenticateUser, revokeSession);
 
 // ─── Password Reset ───────────────────────────────────────────────────────────
 userRouter.post("/auth/forgot-password", passwordResetLimiter, forgotPassword);
-userRouter.get("/auth/reset-password/validate", validatePasswordResetToken);
 userRouter.post("/auth/reset-password", passwordResetLimiter, resetPassword);
 
 // ─── Profile ──────────────────────────────────────────────────────────────────

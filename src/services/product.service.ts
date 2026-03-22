@@ -61,6 +61,14 @@ export const listProducts = async (query: {
   search?: string;
   category?: string;
   brand?: string;
+  collectionId?: string;
+  categoryId?: string;
+  gender?: Gender;
+  shoeType?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  featuredProduct?: boolean;
+  newArrival?: boolean;
 }) => {
   const page = query.page || 1;
   const limit = query.limit || 20;
@@ -71,6 +79,27 @@ export const listProducts = async (query: {
   if (query.category)
     where.category = { contains: query.category, mode: "insensitive" };
   if (query.brand) where.brand = { contains: query.brand, mode: "insensitive" };
+  if (query.collectionId) where.collectionId = query.collectionId;
+  if (query.categoryId) where.categoryId = query.categoryId;
+  if (query.gender) where.gender = query.gender;
+  if (query.shoeType) {
+    where.shoeType = { contains: query.shoeType, mode: "insensitive" };
+  }
+  if (query.minPrice || query.maxPrice) {
+    where.basePrice = {};
+    if (query.minPrice !== undefined) {
+      (where.basePrice as Record<string, unknown>).gte = query.minPrice;
+    }
+    if (query.maxPrice !== undefined) {
+      (where.basePrice as Record<string, unknown>).lte = query.maxPrice;
+    }
+  }
+  if (query.featuredProduct !== undefined) {
+    where.featuredProduct = query.featuredProduct;
+  }
+  if (query.newArrival !== undefined) {
+    where.newArrival = query.newArrival;
+  }
   if (query.search) {
     where.OR = [
       { name: { contains: query.search, mode: "insensitive" } },
@@ -92,6 +121,93 @@ export const listProducts = async (query: {
       total,
       totalPages: Math.ceil(total / limit),
     },
+  };
+};
+
+export const bulkUpdateProductStatus = async (
+  adminId: string,
+  productIds: string[],
+  status: ProductStatus,
+) => {
+  if (!productIds.length) throw new ProductError(400, "Product IDs are required");
+
+  const result = await productRepository.bulkUpdateStatus(productIds, status);
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "Product",
+    "bulk-status",
+  );
+  return result;
+};
+
+export const bulkToggleFeaturedProducts = async (
+  adminId: string,
+  productIds: string[],
+  featuredProduct: boolean,
+) => {
+  if (!productIds.length) throw new ProductError(400, "Product IDs are required");
+
+  const result = await productRepository.bulkToggleFeatured(
+    productIds,
+    featuredProduct,
+  );
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "Product",
+    "bulk-featured",
+  );
+  return result;
+};
+
+export const bulkToggleNewArrivalProducts = async (
+  adminId: string,
+  productIds: string[],
+  newArrival: boolean,
+) => {
+  if (!productIds.length) throw new ProductError(400, "Product IDs are required");
+
+  const result = await productRepository.bulkToggleNewArrival(productIds, newArrival);
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "Product",
+    "bulk-new-arrival",
+  );
+  return result;
+};
+
+export const bulkUpdateProductPrices = async (
+  adminId: string,
+  updates: { productId: string; basePrice: number }[],
+) => {
+  if (!updates.length) throw new ProductError(400, "Price updates are required");
+  if (updates.some((item) => item.basePrice <= 0)) {
+    throw new ProductError(400, "All prices must be positive values");
+  }
+
+  const result = await productRepository.bulkUpdatePrices(updates);
+  await adminRepository.logActivity(
+    adminId,
+    "UPDATE",
+    "Product",
+    "bulk-price",
+  );
+  return result;
+};
+
+export const getAdminProductAnalytics = async () => {
+  const [bestSellers, trending, lowStock] = await Promise.all([
+    productRepository.findBestSellers(0, 10),
+    productRepository.findTrendingProducts(0, 10),
+    inventoryRepository.findLowStock(20),
+  ]);
+
+  return {
+    bestSellers: bestSellers[0],
+    trendingProducts: trending[0],
+    lowStock,
   };
 };
 
@@ -343,48 +459,51 @@ export const listClientProducts = async (query: {
   page?: number;
   limit?: number;
   category?: string;
-  brand?: string;
+  collection?: string;
+  subCategory?: string;
   gender?: Gender;
+  shoeType?: string;
   minPrice?: number;
   maxPrice?: number;
   size?: string;
   color?: string;
+  search?: string;
+  sortBy?: "price" | "newest" | "popular" | "name";
+  order?: "asc" | "desc";
 }) => {
   const page = query.page || 1;
   const limit = query.limit || 20;
   const skip = (page - 1) * limit;
 
-  const where: Record<string, unknown> = { status: "ACTIVE" };
-  if (query.category)
-    where.category = { contains: query.category, mode: "insensitive" };
-  if (query.brand) where.brand = { contains: query.brand, mode: "insensitive" };
-  if (query.gender) where.gender = query.gender;
-  if (query.minPrice || query.maxPrice) {
-    where.basePrice = {};
-    if (query.minPrice)
-      (where.basePrice as Record<string, unknown>).gte = query.minPrice;
-    if (query.maxPrice)
-      (where.basePrice as Record<string, unknown>).lte = query.maxPrice;
-  }
-  if (query.size || query.color) {
-    where.variants = { some: {} };
-    if (query.size)
-      (where.variants as Record<string, unknown>).some = {
-        ...(where.variants as Record<string, Record<string, unknown>>).some,
-        size: query.size,
-      };
-    if (query.color)
-      (where.variants as Record<string, unknown>).some = {
-        ...(where.variants as Record<string, Record<string, unknown>>).some,
-        color: { contains: query.color, mode: "insensitive" },
-      };
+  const orderDirection = query.order ?? "desc";
+  let orderBy: Record<string, string> = { createdAt: orderDirection };
+
+  if (query.sortBy === "price") {
+    orderBy = { basePrice: orderDirection };
+  } else if (query.sortBy === "name") {
+    orderBy = { name: orderDirection };
+  } else if (query.sortBy === "popular") {
+    orderBy = { createdAt: orderDirection };
   }
 
-  const [products, total] = await productRepository.findMany({
+  const [products, total] = await productRepository.findProductsByFilters({
     skip,
     take: limit,
-    where,
+    filters: {
+      category: query.category,
+      collection: query.collection,
+      subCategory: query.subCategory,
+      gender: query.gender,
+      shoeType: query.shoeType,
+      minPrice: query.minPrice,
+      maxPrice: query.maxPrice,
+      size: query.size,
+      color: query.color,
+      search: query.search,
+    },
+    orderBy,
   });
+
   return {
     products,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
@@ -394,6 +513,7 @@ export const listClientProducts = async (query: {
 export const getProductBySlug = async (slug: string) => {
   const product = await productRepository.findBySlug(slug);
   if (!product) throw new ProductError(404, "Product not found");
+
   return product;
 };
 
@@ -414,4 +534,133 @@ export const searchProducts = async (q: string, page = 1, limit = 20) => {
     products,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
+};
+
+export const getBestSellers = async (page = 1, limit = 20) => {
+  const skip = (page - 1) * limit;
+  const [products, total] = await productRepository.findBestSellers(skip, limit);
+  return {
+    products,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
+};
+
+export const getTrendingProducts = async (page = 1, limit = 20) => {
+  const skip = (page - 1) * limit;
+  const [products, total] = await productRepository.findTrendingProducts(skip, limit);
+  return {
+    products,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
+};
+
+export const getFilterOptions = async () => {
+  return productRepository.getFilterOptions();
+};
+
+export const getAllCategories = async () => {
+  return productRepository.findCategories();
+};
+
+export const getProductsByCategory = async (
+  category: string,
+  query: {
+    page?: number;
+    limit?: number;
+    collection?: string;
+    gender?: Gender;
+    shoeType?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    size?: string;
+    color?: string;
+    sortBy?: "price" | "newest" | "popular" | "name";
+    order?: "asc" | "desc";
+  },
+) => {
+  return listClientProducts({
+    ...query,
+    category,
+  });
+};
+
+export const getSubCategoryProducts = async (
+  category: string,
+  subCategory: string,
+  query: {
+    page?: number;
+    limit?: number;
+    collection?: string;
+    gender?: Gender;
+    minPrice?: number;
+    maxPrice?: number;
+    size?: string;
+    color?: string;
+    sortBy?: "price" | "newest" | "popular" | "name";
+    order?: "asc" | "desc";
+  },
+) => {
+  return listClientProducts({
+    ...query,
+    category,
+    subCategory,
+  });
+};
+
+export const getCollections = async () => {
+  return productRepository.findCollections();
+};
+
+export const getProductsByCollection = async (
+  collection: string,
+  query: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    subCategory?: string;
+    gender?: Gender;
+    shoeType?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    size?: string;
+    color?: string;
+    sortBy?: "price" | "newest" | "popular" | "name";
+    order?: "asc" | "desc";
+  },
+) => {
+  return listClientProducts({
+    ...query,
+    collection,
+  });
+};
+
+export const getProductVariants = async (productId: string) => {
+  const product = await productRepository.findById(productId);
+  if (!product) throw new ProductError(404, "Product not found");
+
+  return productRepository.findProductVariants(productId);
+};
+
+export const getVariantDetails = async (variantId: string) => {
+  const variant = await productRepository.findVariantDetails(variantId);
+  if (!variant || variant.status !== "ACTIVE") {
+    throw new ProductError(404, "Variant not found");
+  }
+
+  return variant;
+};
+
+export const getRelatedProducts = async (productId: string, limit = 8) => {
+  const products = await productRepository.findRelatedProducts(productId, limit);
+  return { products };
+};
+
+export const getSimilarProducts = async (productId: string, limit = 8) => {
+  const products = await productRepository.findSimilarProducts(productId, limit);
+  return { products };
+};
+
+export const getPersonalizedProducts = async (customerId: string, limit = 20) => {
+  const products = await productRepository.findPersonalizedProducts(customerId, limit);
+  return { products };
 };

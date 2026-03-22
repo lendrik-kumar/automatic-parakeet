@@ -8,6 +8,15 @@ import {
 
 // ─── Zod Validation Schemas ───────────────────────────────────────────────────────────
 
+const initiatePhoneSchema = z.object({
+  phoneNumber: z
+    .string()
+    .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format"),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  gender: z.enum(["MEN", "WOMEN", "UNISEX", "KIDS"]),
+});
+
 const phoneSchema = z.object({
   phoneNumber: z
     .string()
@@ -19,18 +28,13 @@ const verifyPhoneSchema = z.object({
   otp: z.string().length(6, "OTP must be 6 digits"),
 });
 
-const initiateEmailSchema = z.object({
-  email: z.string().email("Invalid email format"),
-  firstName: z.string().min(1, "First name is required"),
-});
-
 const completeRegistrationSchema = z.object({
   sessionId: z.string(),
-  firstName: z.string().min(2, "First name must be at least 2 characters"),
-  lastName: z.string().min(2, "Last name must be at least 2 characters"),
-  username: z.string().min(3, "Username must be at least 3 characters"),
   email: z.string().email("Invalid email format"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
 });
 
 const loginWithEmailSchema = z.object({
@@ -47,31 +51,46 @@ const forgotPasswordSchema = z.object({
 });
 
 const resetPasswordSchema = z.object({
-  token: z.string(),
+  email: z.string().email("Invalid email format"),
+  otp: z.string().length(6, "OTP must be 6 digits"),
   newPassword: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 const updateProfileSchema = z.object({
   firstName: z.string().min(2).optional(),
   lastName: z.string().min(2).optional(),
-  username: z.string().min(3).optional(),
   phoneNumber: z
     .string()
     .regex(/^\+?[1-9]\d{1,14}$/)
     .optional(),
+  gender: z.enum(["MEN", "WOMEN", "UNISEX", "KIDS"]).optional(),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
+    .optional(),
+});
+
+const initiateEmailOTPSchema = z.object({
+  sessionId: z.string().min(1, "Session ID is required"),
+  email: z.string().email("Invalid email format"),
+  firstName: z.string().min(2).optional(),
+});
+
+const verifyEmailOTPSchema = z.object({
+  sessionId: z.string().min(1, "Session ID is required"),
+  email: z.string().email("Invalid email format"),
+  otp: z.string().length(6, "OTP must be 6 digits"),
 });
 
 // ─── Error Handler Helper ────────────────────────────────────────────────────────────────
 
 const handleError = (res: Response, error: unknown): void => {
   if (error instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
-      });
+    res.status(400).json({
+      success: false,
+      message: "Validation error",
+      errors: error.issues,
+    });
     return;
   }
   if (error instanceof AuthError) {
@@ -92,11 +111,12 @@ export const initiatePhoneRegistration = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { phoneNumber } = phoneSchema.parse(req.body);
-    const result = await svc.initiatePhoneRegistration(phoneNumber);
+    const data = initiatePhoneSchema.parse(req.body);
+    const result = await svc.initiatePhoneRegistration(data);
     res.status(200).json({
       success: true,
       message: "OTP sent successfully to your phone",
+      sessionId: result.sessionId,
       ...(result.devOtp && { otp: result.devOtp }),
     });
   } catch (e) {
@@ -130,59 +150,72 @@ export const verifyPhoneOTP = async (
   try {
     const { phoneNumber, otp } = verifyPhoneSchema.parse(req.body);
     const { sessionId } = await svc.verifyPhoneOTP(phoneNumber, otp);
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Phone verified successfully",
-        sessionId,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Phone verified successfully",
+      sessionId,
+    });
   } catch (e) {
     handleError(res, e);
   }
 };
 
-/** POST /auth/register/initiate-email */
-export const initiateEmailVerification = async (
+/** POST /auth/register/initiate-email-otp */
+export const initiateEmailVerificationOTP = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const { email, firstName } = initiateEmailSchema.parse(req.body);
-    await svc.initiateEmailVerification(email, firstName);
-    res.status(200).json({ success: true, message: "Verification email sent" });
+    const { sessionId, email, firstName } = initiateEmailOTPSchema.parse(
+      req.body,
+    );
+    const result = await svc.initiateEmailVerificationOTP(
+      sessionId,
+      email,
+      firstName,
+    );
+    res.status(200).json({
+      success: true,
+      message: "OTP sent to your email",
+      ...(result.devOtp && { otp: result.devOtp }),
+    });
   } catch (e) {
     handleError(res, e);
   }
 };
 
-/** GET /auth/register/verify-email */
-export const verifyEmailToken = async (
+/** POST /auth/register/verify-email-otp */
+export const verifyEmailOTPHandler = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const token = z.string().min(1, "Token is required").parse(req.query.token);
-    const { email } = await svc.verifyEmailToken(token);
-    res
-      .status(200)
-      .json({ success: true, message: "Email verified successfully", email });
+    const { sessionId, email, otp } = verifyEmailOTPSchema.parse(req.body);
+    await svc.verifyEmailOTP(sessionId, email, otp);
+    res.status(200).json({
+      success: true,
+      message: "Email verified successfully",
+    });
   } catch (e) {
     handleError(res, e);
   }
 };
 
-/** POST /auth/register/resend-email */
-export const resendEmailVerification = async (
+/** POST /auth/register/resend-email-otp */
+export const resendEmailOTPHandler = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const { email, firstName } = initiateEmailSchema.parse(req.body);
-    await svc.resendEmailVerification(email, firstName);
-    res
-      .status(200)
-      .json({ success: true, message: "Verification email resent" });
+    const { sessionId, email, firstName } = initiateEmailOTPSchema.parse(
+      req.body,
+    );
+    const result = await svc.resendEmailOTP(sessionId, email, firstName);
+    res.status(200).json({
+      success: true,
+      message: "OTP resent to your email",
+      ...(result.devOtp && { otp: result.devOtp }),
+    });
   } catch (e) {
     handleError(res, e);
   }
@@ -371,25 +404,12 @@ export const forgotPassword = async (
 ): Promise<void> => {
   try {
     const { email } = forgotPasswordSchema.parse(req.body);
-    await svc.forgotPassword(email);
+    const result = await svc.forgotPassword(email);
     res.status(200).json({
       success: true,
-      message: "If that email exists, a password reset link has been sent",
+      message: "If that email exists, a password reset OTP has been sent",
+      ...(result.devOtp && { otp: result.devOtp }),
     });
-  } catch (e) {
-    handleError(res, e);
-  }
-};
-
-/** GET /auth/reset-password/validate?token=... */
-export const validatePasswordResetToken = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const token = z.string().min(1).parse(req.query.token);
-    const { email } = await svc.validatePasswordResetToken(token);
-    res.status(200).json({ success: true, message: "Token is valid", email });
   } catch (e) {
     handleError(res, e);
   }
@@ -401,8 +421,8 @@ export const resetPassword = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { token, newPassword } = resetPasswordSchema.parse(req.body);
-    await svc.resetPassword(token, newPassword);
+    const { email, otp, newPassword } = resetPasswordSchema.parse(req.body);
+    await svc.resetPassword(email, otp, newPassword);
     res
       .status(200)
       .json({ success: true, message: "Password reset successfully" });
@@ -446,13 +466,11 @@ export const updateUserProfile = async (
     }
     const fields = updateProfileSchema.parse(req.body);
     const user = await svc.updateUserProfile(req.user.id, fields);
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Profile updated successfully",
-        data: { user },
-      });
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: { user },
+    });
   } catch (e) {
     handleError(res, e);
   }
