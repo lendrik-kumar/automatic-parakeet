@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ============================================
@@ -462,17 +464,24 @@ enum RefundStatus {
 // ============================================
 
 model Payment {
-  id              String          @id @default(uuid())
-  orderId         String
-  paymentMethod   PaymentMethod
-  paymentProvider PaymentProvider
-  transactionId   String?         @unique @db.VarChar(255)
-  paymentStatus   PaymentStatus   @default(PENDING)
-  amount          Float
-  currency        String          @default("USD") @db.VarChar(3)
-  paidAt          DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                     String          @id @default(uuid())
+  orderId                String
+  paymentMethod          PaymentMethod
+  paymentProvider        PaymentProvider
+  transactionId          String?         @unique @db.VarChar(255)
+  paymentStatus          PaymentStatus   @default(PENDING)
+  amount                 Float
+  currency               String          @default("USD") @db.VarChar(3)
+  paidAt                 DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  
+  // Razorpay-specific fields
+  razorpayOrderId        String?         @unique @db.VarChar(255)
+  razorpayPaymentId      String?         @unique @db.VarChar(255)
+  razorpaySignature      String?         @db.Text
+  failureReason          String?         @db.Text
+  paymentGatewayResponse Json?
 
   order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   refunds         Refund[]
@@ -480,6 +489,8 @@ model Payment {
   @@index([orderId])
   @@index([transactionId])
   @@index([paymentStatus])
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
 }
 
 model Refund {

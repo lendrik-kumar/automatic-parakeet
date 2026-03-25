@@ -47,3 +47,34 @@ export const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Webhook rate limiter (moderate restrictions for legitimate webhooks)
+export const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 webhook requests per windowMs
+  message: {
+    success: false,
+    message: "Too many webhook requests, please try again later",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip rate limiting for successful webhook verification
+  skipSuccessfulRequests: true,
+});
+
+// Strict webhook rate limiter for failed verifications
+export const webhookFailureLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Very strict limit for failed webhook attempts
+  message: {
+    success: false,
+    message: "Too many failed webhook attempts, please check your configuration",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Apply only to failed requests
+  skip: (req): boolean => {
+    // This will be evaluated after the webhook verification
+    return (req as unknown as { webhookVerified?: boolean }).webhookVerified === true;
+  },
+});

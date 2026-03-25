@@ -462,7 +462,7 @@ export const createCheckoutOrder = async (
 };
 
 /**
- * Step 3: Process payment - Placeholder for Razorpay integration
+ * Step 3: Process payment - Razorpay integration or COD handling
  */
 export const processOrderPayment = async (
   userId: string,
@@ -484,37 +484,73 @@ export const processOrderPayment = async (
     throw new OrderError(400, "Order already paid");
   }
 
-  // Create or update payment record
-  const payment = existingPayment
-    ? await prisma.payment.update({
-        where: { id: existingPayment.id },
-        data: {
-          paymentMethod: data.paymentMethod,
-          paymentProvider: "RAZORPAY" as PaymentProvider,
-        },
-      })
-    : await prisma.payment.create({
-        data: {
-          orderId: order.id,
-          paymentMethod: data.paymentMethod,
-          paymentProvider: "RAZORPAY" as PaymentProvider,
-          amount: order.totalAmount,
-          paymentStatus: "PENDING",
-        },
-      });
+  // Handle COD separately (no Razorpay needed)
+  if (data.paymentMethod === "COD") {
+    const payment = existingPayment
+      ? await prisma.payment.update({
+          where: { id: existingPayment.id },
+          data: {
+            paymentMethod: "COD",
+            paymentProvider: "INTERNAL" as PaymentProvider,
+            paymentStatus: "PENDING", // Will be COMPLETED on delivery
+          },
+        })
+      : await prisma.payment.create({
+          data: {
+            orderId: order.id,
+            paymentMethod: "COD",
+            paymentProvider: "INTERNAL" as PaymentProvider,
+            amount: order.totalAmount,
+            currency: order.currency,
+            paymentStatus: "PENDING",
+          },
+        });
 
-  // TODO: Integrate with Razorpay
-  // For now, return payment session placeholder
+    // Mark order as CONFIRMED (no payment gateway needed)
+    await orderRepository.updateStatus(orderId, "CONFIRMED");
 
-  return {
-    paymentId: payment.id,
+    return {
+      paymentId: payment.id,
+      orderId: order.id,
+      amount: order.totalAmount,
+      currency: order.currency,
+      paymentMethod: "COD",
+      status: "PENDING",
+      message: "Order confirmed. Payment will be collected on delivery.",
+    };
+  }
+
+  // For online payments: Create Razorpay order
+  const { createRazorpayPaymentSession } = await import("./payment.service.js");
+
+  // Detect currency (could be enhanced with geo-detection)
+  const currency = (order.currency || "USD") as "USD" | "INR";
+
+  // Get customer details
+  const customer = order.customer;
+  
+  // Try to get phone from shipping address if available
+  const shippingAddress = order.addresses?.shippingAddress 
+    ? JSON.parse(order.addresses.shippingAddress)
+    : null;
+  const customerPhone = shippingAddress?.phoneNumber || "+1234567890"; // Default fallback
+
+  // Create Razorpay payment session
+  const paymentSession = await createRazorpayPaymentSession({
     orderId: order.id,
     amount: order.totalAmount,
-    currency: "USD",
-    paymentMethod: data.paymentMethod,
-    status: payment.paymentStatus,
-    // Razorpay integration would provide:
-    // razorpayOrderId, razorpayKey, etc.
+    currency,
+    customerDetails: {
+      name: `${customer.firstName} ${customer.lastName}`,
+      email: customer.email,
+      phone: customerPhone,
+    },
+    orderNumber: order.orderNumber,
+  });
+
+  return {
+    ...paymentSession,
+    message: "Payment session created. Complete payment on Razorpay checkout.",
   };
 };
 

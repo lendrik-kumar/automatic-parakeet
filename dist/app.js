@@ -3,18 +3,57 @@ import helmet from "helmet";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import { validateEnvironmentOrExit, getEnvironmentSummary } from "./utils/environmentValidation.js";
+import { createLogger } from "./utils/secureLogger.js";
 dotenv.config({ path: "./.env" });
+// Validate environment before starting server
+validateEnvironmentOrExit();
+const logger = createLogger("Application");
 export const envMode = process.env.NODE_ENV?.trim() || "DEVELOPMENT";
 const port = process.env.PORT || 3000;
+logger.info("Starting Sprint Shoes API", {
+    mode: envMode,
+    port,
+    environment: getEnvironmentSummary(),
+});
 const app = express();
 app.use(helmet({
     contentSecurityPolicy: envMode !== "DEVELOPMENT",
     crossOriginEmbedderPolicy: envMode !== "DEVELOPMENT",
 }));
+// IMPORTANT: Raw body parsing for webhook signature verification
+// This must come BEFORE express.json() middleware
+app.use("/api/payments/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// ── Secure CORS Configuration ───────────────────────────────────────────────
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    // Development origins
+    ...(envMode === "DEVELOPMENT"
+        ? ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"]
+        : []),
+].filter(Boolean);
+logger.info("CORS configuration", { allowedOrigins });
 app.use(cors({
-    origin: "*",
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        }
+        else {
+            logger.warn("CORS request blocked", {
+                origin,
+                allowedOrigins,
+                userAgent: "unknown" // Will be set by middleware
+            });
+            callback(new Error(`Origin ${origin} not allowed by CORS policy`));
+        }
+    },
     credentials: true,
 }));
 app.use(morgan("dev"));
